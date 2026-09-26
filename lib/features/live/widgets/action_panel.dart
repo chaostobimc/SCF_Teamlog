@@ -61,19 +61,40 @@ class _ShotResolution extends StatelessWidget {
       children: [
         Row(
           children: [
-            const Icon(Icons.sports_handball, color: ScfColors.accent, size: 20),
-            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: ScfColors.accentSoft,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(
+                isKeeper ? Icons.back_hand : Icons.sports_handball,
+                color: ScfColors.accent,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 10),
             Expanded(
-              child: Text(
-                isKeeper
-                    ? 'Wurf auf das Tor - Zone: ${pending.goalZone.label}'
-                    : 'Wurf - Zone: ${pending.goalZone.label}',
-                style: const TextStyle(fontWeight: FontWeight.w700),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    isKeeper ? 'Gegnerwurf' : 'Wurf',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w800,
+                      fontSize: 15,
+                    ),
+                  ),
+                  Text(
+                    'Zone: ${pending.goalZone.label}',
+                    style: ScfText.caption,
+                  ),
+                ],
               ),
             ),
           ],
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
         ThrowContextChips(
           isSevenMeter: pending.isSevenMeter,
           isFreeThrow: pending.isFreeThrow,
@@ -88,47 +109,53 @@ class _ShotResolution extends StatelessWidget {
             label: 'Parade',
             color: ScfColors.success,
             icon: Icons.back_hand,
-            onPressed: () => controller.resolvePendingShot(MatchEventType.wurfGehalten),
+            onPressed: () =>
+                controller.resolvePendingShot(MatchEventType.wurfGehalten),
           ),
           const SizedBox(height: 8),
           _BigButton(
             label: 'Gegentor',
             color: ScfColors.danger,
             icon: Icons.sports_score,
-            onPressed: () => controller.resolvePendingShot(MatchEventType.tor),
+            onPressed: () =>
+                controller.resolvePendingShot(MatchEventType.tor),
           ),
         ] else ...[
           _BigButton(
             label: 'Tor',
             color: ScfColors.success,
             icon: Icons.check_circle,
-            onPressed: () => controller.resolvePendingShot(MatchEventType.tor),
+            onPressed: () =>
+                controller.resolvePendingShot(MatchEventType.tor),
           ),
           const SizedBox(height: 8),
           _BigButton(
             label: 'Gehalten',
-            color: ScfColors.info,
+            color: ScfColors.cyan,
             icon: Icons.back_hand,
-            onPressed: () => controller.resolvePendingShot(MatchEventType.wurfGehalten),
+            onPressed: () =>
+                controller.resolvePendingShot(MatchEventType.wurfGehalten),
           ),
           const SizedBox(height: 8),
           _BigButton(
             label: 'Geblockt',
             color: ScfColors.warning,
             icon: Icons.block,
-            onPressed: () => controller.resolvePendingShot(MatchEventType.wurfGeblockt),
+            onPressed: () =>
+                controller.resolvePendingShot(MatchEventType.wurfGeblockt),
           ),
           const SizedBox(height: 8),
           const Text(
             'Daneben: Zone am Torrand antippen',
             textAlign: TextAlign.center,
-            style: TextStyle(color: ScfColors.textSecondary, fontSize: 12),
+            style: TextStyle(color: ScfColors.textFaint, fontSize: 11.5),
           ),
         ],
         const SizedBox(height: 10),
-        TextButton(
+        TextButton.icon(
           onPressed: controller.cancelPendingShot,
-          child: const Text('Abbrechen'),
+          icon: const Icon(Icons.close, size: 16),
+          label: const Text('Abbrechen'),
         ),
       ],
     );
@@ -174,24 +201,37 @@ class _QuickActions extends StatelessWidget {
             ThrowContext.field => null,
           }),
         ),
-        const SizedBox(height: 12),
-        Text(
-          isKeeper ? 'Torhüter-Aktion' : 'Wurf: Zone im Tor antippen',
-          style: const TextStyle(
-            color: ScfColors.textSecondary,
-            fontSize: 12,
-            fontStyle: FontStyle.italic,
-          ),
-        ),
-        const SizedBox(height: 8),
-        if (isKeeper)
+        const SizedBox(height: 14),
+        if (isKeeper) ...[
+          const _SectionTitle('Torwart'),
+          const SizedBox(height: 8),
           _grid([
             _ActionDef('Parade', ScfColors.success, Icons.back_hand,
                 () => controller.commitQuickAction(MatchEventType.parade)),
             _ActionDef('Gegentor', ScfColors.danger, Icons.sports_score,
                 () => controller.commitQuickAction(MatchEventType.gegentor)),
-          ])
-        else
+          ]),
+          const SizedBox(height: 14),
+          const _SectionTitle('Gegnerwurf'),
+          const SizedBox(height: 8),
+          _grid([
+            _ActionDef('Gegner: daneben', ScfColors.warning, Icons.close,
+                () => controller.commitOpponentAction(MatchEventType.fehlwurf)),
+            _ActionDef(
+                'Gegner: geblockt',
+                ScfColors.cyan,
+                Icons.block,
+                () =>
+                    controller.commitOpponentAction(MatchEventType.wurfGeblockt)),
+          ]),
+          const SizedBox(height: 8),
+          const Text(
+            'Für das genaue Wurfbild: Torzone antippen, dann Parade/Gegentor.',
+            style: TextStyle(color: ScfColors.textFaint, fontSize: 11.5),
+          ),
+        ] else ...[
+          const _SectionTitle('Wurf: Zone im Tor antippen'),
+          const SizedBox(height: 8),
           _grid([
             _ActionDef('Fehlwurf', ScfColors.danger, Icons.close,
                 () => controller.commitQuickAction(MatchEventType.fehlwurf)),
@@ -208,29 +248,23 @@ class _QuickActions extends StatelessWidget {
             _ActionDef('Gefoult', ScfColors.success, Icons.person_off,
                 () => controller.commitQuickAction(MatchEventType.gefoult)),
             _ActionDef('7m geholt', ScfColors.success, Icons.flag,
-                () => controller.commitQuickAction(MatchEventType.siebenMeterHerausgeholt)),
-            _ActionDef('Duell', ScfColors.success, Icons.sports_kabaddi,
+                () => controller
+                    .commitQuickAction(MatchEventType.siebenMeterHerausgeholt)),
+            _ActionDef('Duell gewonnen', ScfColors.success, Icons.sports_kabaddi,
                 () => controller.commitQuickAction(MatchEventType.duelGewonnen)),
           ]),
+        ],
         const SizedBox(height: 14),
-        const Text(
-          'Sanktionen',
-          style: TextStyle(
-            color: ScfColors.textSecondary,
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            letterSpacing: 1.2,
-          ),
-        ),
+        const _SectionTitle('Sanktionen'),
         const SizedBox(height: 8),
         _grid([
-          _ActionDef('Gelb', ScfColors.warning, null,
+          _ActionDef('Gelbe Karte', ScfColors.warning, Icons.style,
               () => controller.commitQuickAction(MatchEventType.gelbeKarte)),
-          _ActionDef('2 min', ScfColors.accentDim, null,
+          _ActionDef('2 Minuten', ScfColors.accent, Icons.timer,
               () => controller.commitQuickAction(MatchEventType.zeitstrafe)),
-          _ActionDef('Rot', ScfColors.danger, null,
+          _ActionDef('Rote Karte', ScfColors.danger, Icons.style,
               () => controller.commitQuickAction(MatchEventType.roteKarte)),
-          _ActionDef('Blau', ScfColors.info, null,
+          _ActionDef('Blaue Karte', ScfColors.cyan, Icons.style,
               () => controller.commitQuickAction(MatchEventType.blaueKarte)),
         ]),
       ],
@@ -244,12 +278,23 @@ class _QuickActions extends StatelessWidget {
       physics: const NeverScrollableScrollPhysics(),
       mainAxisSpacing: 8,
       crossAxisSpacing: 8,
-      childAspectRatio: 2.6,
+      childAspectRatio: 2.5,
       children: [
         for (final def in defs)
           _ActionButton(def: def, enabled: player != null),
       ],
     );
+  }
+}
+
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(text.toUpperCase(), style: ScfText.sectionLabel);
   }
 }
 
@@ -263,10 +308,10 @@ class _PlayerHeader extends StatelessWidget {
     final player = this.player;
     if (player == null) {
       return Container(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
         decoration: BoxDecoration(
           color: ScfColors.surfaceRaised,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(color: ScfColors.outline),
         ),
         child: const Text(
@@ -275,29 +320,52 @@ class _PlayerHeader extends StatelessWidget {
         ),
       );
     }
+    final isKeeper = player.position == PlayerPosition.torwart;
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
       decoration: BoxDecoration(
         color: ScfColors.surfaceRaised,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: ScfColors.accent, width: 1.2),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isKeeper ? ScfColors.cyan : ScfColors.accent,
+          width: 1.2,
+        ),
       ),
       child: Row(
         children: [
-          Text(
-            '#${player.number}',
-            style: const TextStyle(
-              fontWeight: FontWeight.w800,
-              fontSize: 16,
-              color: ScfColors.accent,
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: (isKeeper ? ScfColors.cyan : ScfColors.accent)
+                  .withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              '${player.number}',
+              style: TextStyle(
+                fontWeight: FontWeight.w900,
+                fontSize: 16,
+                color: isKeeper ? ScfColors.cyan : ScfColors.accent,
+              ),
             ),
           ),
           const SizedBox(width: 10),
           Expanded(
-            child: Text(
-              player.fullName,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w600),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  player.fullName,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                Text(
+                  isKeeper ? 'Torwart' : 'Feldspieler',
+                  style: ScfText.caption.copyWith(fontSize: 11),
+                ),
+              ],
             ),
           ),
         ],
@@ -323,8 +391,8 @@ class ThrowContextChips extends StatelessWidget {
     return Row(
       children: [
         Expanded(
-          child: _contextChip('Feldwurf', ThrowContext.field,
-              !isSevenMeter && !isFreeThrow),
+          child: _contextChip(
+              'Feldwurf', ThrowContext.field, !isSevenMeter && !isFreeThrow),
         ),
         const SizedBox(width: 6),
         Expanded(
@@ -332,7 +400,8 @@ class ThrowContextChips extends StatelessWidget {
         ),
         const SizedBox(width: 6),
         Expanded(
-          child: _contextChip('Freiwurf', ThrowContext.freeThrow, isFreeThrow),
+          child:
+              _contextChip('Freiwurf', ThrowContext.freeThrow, isFreeThrow),
         ),
       ],
     );
@@ -341,13 +410,14 @@ class ThrowContextChips extends StatelessWidget {
   Widget _contextChip(String label, ThrowContext ctx, bool active) {
     return InkWell(
       onTap: onContext == null ? null : () => onContext!(ctx),
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        height: 34,
+      borderRadius: BorderRadius.circular(10),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        height: 36,
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: active ? ScfColors.accent : ScfColors.surfaceRaised,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: active ? ScfColors.accent : ScfColors.outline,
           ),
@@ -355,9 +425,9 @@ class ThrowContextChips extends StatelessWidget {
         child: Text(
           label,
           style: TextStyle(
-            color: active ? ScfColors.textPrimary : ScfColors.textSecondary,
-            fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-            fontSize: 13,
+            color: active ? Colors.black : ScfColors.textSecondary,
+            fontWeight: active ? FontWeight.w800 : FontWeight.w600,
+            fontSize: 12.5,
           ),
         ),
       ),
@@ -385,45 +455,43 @@ class _ActionButton extends StatelessWidget {
     final color = def.color;
     return Material(
       color: enabled
-          ? (color?.withValues(alpha: 0.22) ?? ScfColors.surfaceCard)
-          : ScfColors.surfaceRaised,
-      borderRadius: BorderRadius.circular(8),
+          ? (color?.withValues(alpha: 0.14) ?? ScfColors.surfaceRaised)
+          : ScfColors.surface,
+      borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: enabled ? def.onPressed : null,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(12),
         child: Container(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: enabled ? (color ?? ScfColors.outline) : ScfColors.outline,
-              width: color != null ? 1.2 : 1,
+              color: enabled
+                  ? (color?.withValues(alpha: 0.55) ?? ScfColors.outline)
+                  : ScfColors.outlineSoft,
             ),
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 10),
+          alignment: Alignment.centerLeft,
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               if (def.icon != null) ...[
                 Icon(def.icon,
-                    size: 16,
+                    size: 17,
                     color: enabled
                         ? (color ?? ScfColors.textPrimary)
-                        : ScfColors.textSecondary),
-                const SizedBox(width: 6),
+                        : ScfColors.textFaint),
+                const SizedBox(width: 8),
               ],
-              Flexible(
+              Expanded(
                 child: Text(
                   def.label,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: enabled
-                        ? (color != null
-                            ? Color.lerp(color, ScfColors.textPrimary, 0.45)
-                            : ScfColors.textPrimary)
-                        : ScfColors.textSecondary,
+                        ? ScfColors.textPrimary
+                        : ScfColors.textFaint,
                     fontWeight: FontWeight.w600,
-                    fontSize: 13,
+                    fontSize: 12.5,
                   ),
                 ),
               ),
@@ -451,22 +519,22 @@ class _BigButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 52,
+      height: 54,
       child: Material(
         color: color,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
         child: InkWell(
           onTap: onPressed,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(12),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, color: Colors.white, size: 22),
+              Icon(icon, color: Colors.black, size: 22),
               const SizedBox(width: 10),
               Text(
                 label,
                 style: const TextStyle(
-                  color: Colors.white,
+                  color: Colors.black,
                   fontWeight: FontWeight.w800,
                   fontSize: 16,
                 ),

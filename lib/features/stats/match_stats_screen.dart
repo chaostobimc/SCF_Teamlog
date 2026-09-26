@@ -9,6 +9,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/app_formatters.dart';
+import '../../core/utils/repaint_capture.dart';
 import '../../data/export/export_service.dart';
 import '../../data/models/match.dart';
 import '../../data/models/match_event.dart';
@@ -17,17 +18,42 @@ import '../../data/models/team.dart';
 import '../../logic/providers.dart';
 import '../../logic/stats_calculator.dart';
 import '../../routing/app_router.dart';
+import '../live/widgets/goal_grid.dart';
 
-/// Auswertung eines Spiels: Live-Statistik, Spielertabelle, Export.
-class MatchStatsScreen extends ConsumerWidget {
+/// Auswertung eines Spiels: Uebersicht, Wurfbild, Tabelle, Export.
+class MatchStatsScreen extends ConsumerStatefulWidget {
   const MatchStatsScreen({super.key, required this.matchId});
 
   final String matchId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final match = ref.watch(matchByIdProvider(matchId));
-    final team = match == null ? null : ref.watch(teamByIdProvider(match.ownTeamId));
+  ConsumerState<MatchStatsScreen> createState() => _MatchStatsScreenState();
+}
+
+class _MatchStatsScreenState extends ConsumerState<MatchStatsScreen>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController;
+  final GlobalKey _overviewKey = GlobalKey();
+  final GlobalKey _shotmapKey = GlobalKey();
+  final GlobalKey _tableKey = GlobalKey();
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final match = ref.watch(matchByIdProvider(widget.matchId));
+    final team =
+        match == null ? null : ref.watch(teamByIdProvider(match.ownTeamId));
 
     if (match == null || team == null) {
       return const Scaffold(
@@ -36,10 +62,11 @@ class MatchStatsScreen extends ConsumerWidget {
     }
 
     final stats = calculateTeamStats(match, team);
+    final shotMap = keeperShotMap(match);
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('Auswertung: ${team.name} - ${match.opponentName}'),
+        title: Text('${team.name} – ${match.opponentName}'),
         actions: [
           if (match.status != MatchStatus.beendet)
             IconButton(
@@ -50,42 +77,77 @@ class MatchStatsScreen extends ConsumerWidget {
               ),
               icon: const Icon(Icons.sports_handball),
             ),
-          _ExportMenu(match: match, team: team),
+          _ExportMenu(
+            match: match,
+            team: team,
+            captureOverview: () => captureWidgetPng(_overviewKey),
+            captureShotmap: () => captureWidgetPng(_shotmapKey),
+            captureTable: () => captureWidgetPng(_tableKey),
+          ),
         ],
       ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final wide = constraints.maxWidth >= 1000;
-          final summary = _SummaryColumn(match: match, team: team, stats: stats);
-          final table = _PlayerTable(match: match, team: team);
-
-          return Padding(
-            padding: const EdgeInsets.all(16),
-            child: wide
-                ? Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(width: 380, child: summary),
-                      const SizedBox(width: 16),
-                      Expanded(child: table),
-                    ],
-                  )
-                : ListView(
-                    children: [
-                      summary,
-                      const SizedBox(height: 16),
-                      table,
-                    ],
+      body: Column(
+        children: [
+          Material(
+            color: ScfColors.surface,
+            child: TabBar(
+              controller: _tabController,
+              tabs: const [
+                Tab(icon: Icon(Icons.dashboard_outlined), text: 'Übersicht'),
+                Tab(icon: Icon(Icons.gps_fixed), text: 'Wurfbild'),
+                Tab(icon: Icon(Icons.table_rows_outlined), text: 'Tabelle'),
+              ],
+            ),
+          ),
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: RepaintBoundary(
+                    key: _overviewKey,
+                    child: ColoredBox(
+                      color: ScfColors.background,
+                      child: _OverviewTab(
+                          match: match, team: team, stats: stats),
+                    ),
                   ),
-          );
-        },
+                ),
+                SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: RepaintBoundary(
+                    key: _shotmapKey,
+                    child: ColoredBox(
+                      color: ScfColors.background,
+                      child: _ShotmapTab(
+                          match: match, team: team, shotMap: shotMap),
+                    ),
+                  ),
+                ),
+                SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: RepaintBoundary(
+                    key: _tableKey,
+                    child: ColoredBox(
+                      color: ScfColors.background,
+                      child: _PlayerTable(match: match, team: team),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-class _SummaryColumn extends StatelessWidget {
-  const _SummaryColumn({
+// ------------------------------------------------------------- Uebersicht
+
+class _OverviewTab extends StatelessWidget {
+  const _OverviewTab({
     required this.match,
     required this.team,
     required this.stats,
@@ -98,87 +160,127 @@ class _SummaryColumn extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final total = stats.total;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: _ScoreCard(match: match, team: team, stats: stats),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _MetricsCard(total: total),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
         Card(
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  '${AppFormatters.date(match.date)} · '
-                  '${match.isHome ? 'Heim' : 'Auswärts'}',
-                  style: const TextStyle(
-                      color: ScfColors.textSecondary, fontSize: 12.5),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  '${stats.goalsFor} : ${stats.goalsAgainst}',
-                  style: const TextStyle(
-                    fontSize: 34,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
+                const Text('Torzone der eigenen Würfe',
+                    style:
+                        TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
                 const SizedBox(height: 4),
-                Text(
-                  '${team.name} gegen ${match.opponentName}',
-                  style: const TextStyle(color: ScfColors.textSecondary),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Teamkennzahlen',
-                    style:
-                        TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-                const SizedBox(height: 10),
-                _MetricRow('Wurfquote', AppFormatters.percent(total.shotRatio)),
-                _MetricRow('Wurfquote Feld',
-                    AppFormatters.percent(total.fieldShotRatio)),
-                _MetricRow('7-Meter',
-                    '${total.goalsSevenMeter}/${total.shotsSevenMeter}'),
-                _MetricRow('Paradenquote',
-                    AppFormatters.percent(total.saveRatio)),
-                _MetricRow('Ballverluste', '${total.ballLosses}'),
-                _MetricRow('Technikfehler', '${total.technicalErrors}'),
-                _MetricRow('Zeitstrafen', '${total.twoMinutes}'),
-                _MetricRow('Gelbe Karten', '${total.yellowCards}'),
-                _MetricRow('Rote Karten', '${total.redCards}'),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Trefferzonen',
-                    style:
-                        TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-                const SizedBox(height: 6),
                 const Text('Tore / Würfe aufs Tor je Zone',
                     style: TextStyle(
                         color: ScfColors.textSecondary, fontSize: 12)),
-                const SizedBox(height: 12),
-                Center(child: _ZoneHeatmap(zones: stats.zones)),
+                const SizedBox(height: 14),
+                Center(
+                  child: GoalGrid(
+                    onZoneTap: (_) {},
+                    enabled: false,
+                    showTallies: true,
+                    zones: stats.zones,
+                  ),
+                ),
               ],
             ),
           ),
         ),
       ],
+    );
+  }
+}
+
+class _ScoreCard extends StatelessWidget {
+  const _ScoreCard({
+    required this.match,
+    required this.team,
+    required this.stats,
+  });
+
+  final Match match;
+  final Team team;
+  final TeamStats stats;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${AppFormatters.date(match.date)} · '
+              '${match.isHome ? 'Heimspiel' : 'Auswärtsspiel'}',
+              style: ScfText.caption,
+            ),
+            const SizedBox(height: 10),
+            Text(
+              '${stats.goalsFor} : ${stats.goalsAgainst}',
+              style: ScfText.numberBig.copyWith(fontSize: 42),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              '${team.name} gegen ${match.opponentName}',
+              style: const TextStyle(
+                  color: ScfColors.textPrimary,
+                  fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MetricsCard extends StatelessWidget {
+  const _MetricsCard({required this.total});
+
+  final PlayerStats total;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Teamkennzahlen',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+            const SizedBox(height: 10),
+            _MetricRow('Wurfquote', AppFormatters.percent(total.shotRatio)),
+            _MetricRow(
+                'Wurfquote Feld', AppFormatters.percent(total.fieldShotRatio)),
+            _MetricRow('7-Meter',
+                '${total.goalsSevenMeter}/${total.shotsSevenMeter}'),
+            _MetricRow('Paradenquote', AppFormatters.percent(total.saveRatio)),
+            _MetricRow('Ballverluste', '${total.ballLosses}'),
+            _MetricRow('Technikfehler', '${total.technicalErrors}'),
+            _MetricRow('Zeitstrafen', '${total.twoMinutes}'),
+            _MetricRow('Gelbe Karten', '${total.yellowCards}'),
+            _MetricRow('Rote/Blaue Karten',
+                '${total.redCards + total.blueCards}'),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -196,118 +298,223 @@ class _MetricRow extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label,
+          Text(label, style: ScfText.caption),
+          Text(value,
               style: const TextStyle(
-                  color: ScfColors.textSecondary, fontSize: 13.5)),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.w800)),
+                  fontWeight: FontWeight.w800, color: ScfColors.textPrimary)),
         ],
       ),
     );
   }
 }
 
-class _ZoneHeatmap extends StatelessWidget {
-  const _ZoneHeatmap({required this.zones});
+// --------------------------------------------------------------- Wurfbild
 
-  final Map<GoalZone, ZoneTally> zones;
+class _ShotmapTab extends StatelessWidget {
+  const _ShotmapTab({
+    required this.match,
+    required this.team,
+    required this.shotMap,
+  });
+
+  final Match match;
+  final Team team;
+  final KeeperShotMap shotMap;
 
   @override
   Widget build(BuildContext context) {
-    Widget cell(GoalZone zone) {
-      final tally = zones[zone] ?? const ZoneTally();
-      final hasData = tally.total > 0;
-      final color = !hasData
-          ? ScfColors.surfaceRaised
-          : (tally.goals > 0
-              ? ScfColors.success.withValues(alpha: 0.35)
-              : ScfColors.danger.withValues(alpha: 0.35));
-      return Container(
-        width: 56,
-        height: 38,
-        margin: const EdgeInsets.all(2),
-        decoration: BoxDecoration(
-          color: color,
-          border: Border.all(color: ScfColors.outline),
-        ),
-        alignment: Alignment.center,
-        child: hasData
-            ? Text(
-                '${tally.goals}/${tally.total}',
-                style: const TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w700,
-                ),
-              )
-            : const SizedBox.shrink(),
-      );
-    }
-
     return Column(
-      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            cell(GoalZone.obenLinks),
-            cell(GoalZone.obenMitte),
-            cell(GoalZone.obenRechts),
-          ],
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Wurfbild Torwart',
+                    style:
+                        TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                const SizedBox(height: 4),
+                Text(
+                  'Paraden / Würfe aufs Tor je Zone · '
+                  '${shotMap.saves} gehalten, ${shotMap.conceded} Gegentore'
+                  '${shotMap.shotsOnTarget == 0 ? '' : ' (${AppFormatters.percent(shotMap.saveRatio)})'}',
+                  style: const TextStyle(
+                      color: ScfColors.textSecondary, fontSize: 12),
+                ),
+                const SizedBox(height: 14),
+                Center(
+                  child: GoalGrid(
+                    onZoneTap: (_) {},
+                    enabled: false,
+                    showTallies: true,
+                    mode: GoalGridMode.goalkeeper,
+                    zones: shotMap.goalZones,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            cell(GoalZone.untenLinks),
-            cell(GoalZone.untenMitte),
-            cell(GoalZone.untenRechts),
-          ],
+        const SizedBox(height: 12),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Wurfpositionen des Gegners',
+                    style:
+                        TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                const SizedBox(height: 12),
+                _OriginMap(shotMap: shotMap),
+              ],
+            ),
+          ),
         ),
-        const SizedBox(height: 6),
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _outer(GoalZone.linksDaneben),
-            _outer(GoalZone.drueber),
-            _outer(GoalZone.rechtsDaneben),
-          ],
+        const SizedBox(height: 12),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Torhüter',
+                    style:
+                        TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                const SizedBox(height: 10),
+                for (final player in team.goalkeepers)
+                  _KeeperRow(player: player, match: match),
+                if (team.goalkeepers.isEmpty)
+                  const Text('Kein Torwart im Kader',
+                      style: TextStyle(color: ScfColors.textFaint)),
+              ],
+            ),
+          ),
         ),
       ],
     );
   }
+}
 
-  Widget _outer(GoalZone zone) {
-    final tally = zones[zone] ?? const ZoneTally();
-    return Container(
-      width: 62,
-      height: 28,
-      margin: const EdgeInsets.all(2),
-      decoration: BoxDecoration(
-        color: ScfColors.surfaceRaised,
-        border: Border.all(color: ScfColors.outline),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      alignment: Alignment.center,
-      child: Text(
-        tally.total > 0 ? '${tally.goals}/${tally.total}' : zone.shortLabel,
-        style: const TextStyle(fontSize: 10.5, color: ScfColors.textSecondary),
+class _OriginMap extends StatelessWidget {
+  const _OriginMap({required this.shotMap});
+
+  final KeeperShotMap shotMap;
+
+  @override
+  Widget build(BuildContext context) {
+    final totals = <CourtZone, int>{};
+    shotMap.originsOnTarget.forEach((zone, tally) {
+      totals[zone] = (totals[zone] ?? 0) + tally.total;
+    });
+    shotMap.originMisses.forEach((zone, count) {
+      totals[zone] = (totals[zone] ?? 0) + count;
+    });
+
+    if (totals.isEmpty) {
+      return const Text('Noch keine Gegnerwürfe erfasst',
+          style: TextStyle(color: ScfColors.textFaint));
+    }
+
+    final sorted = totals.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final maxCount =
+        sorted.first.value == 0 ? 1 : sorted.first.value;
+
+    return Column(
+      children: [
+        for (final entry in sorted)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 110,
+                  child: Text(entry.key.label,
+                      style: const TextStyle(
+                          fontSize: 12, color: ScfColors.textSecondary)),
+                ),
+                Expanded(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: entry.value / maxCount,
+                      minHeight: 12,
+                      backgroundColor: ScfColors.surfaceRaised,
+                      color: ScfColors.cyan,
+                    ),
+                  ),
+                ),
+                SizedBox(
+                  width: 34,
+                  child: Text(
+                    '${entry.value}',
+                    textAlign: TextAlign.right,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontFeatures: [FontFeature.tabularFigures()]),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _KeeperRow extends StatelessWidget {
+  const _KeeperRow({required this.player, required this.match});
+
+  final Player player;
+  final Match match;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = statsForPlayer(match, player);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 15,
+            backgroundColor: ScfColors.cyanSoft,
+            child: Text(
+              '${player.number}',
+              style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  color: ScfColors.cyan),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(player.fullName,
+                style: const TextStyle(fontWeight: FontWeight.w600)),
+          ),
+          Text('${s.saves} Paraden', style: ScfText.caption),
+          const SizedBox(width: 12),
+          Text('${s.conceded} GT', style: ScfText.caption),
+          const SizedBox(width: 12),
+          SizedBox(
+            width: 46,
+            child: Text(
+              AppFormatters.percent(s.saveRatio),
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  color: ScfColors.textPrimary),
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-extension on GoalZone {
-  String get shortLabel {
-    switch (this) {
-      case GoalZone.linksDaneben:
-        return 'links';
-      case GoalZone.rechtsDaneben:
-        return 'rechts';
-      case GoalZone.drueber:
-        return 'Latte';
-      default:
-        return label;
-    }
-  }
-}
+// ----------------------------------------------------------------- Tabelle
 
 class _PlayerTable extends StatelessWidget {
   const _PlayerTable({required this.match, required this.team});
@@ -323,48 +530,38 @@ class _PlayerTable extends StatelessWidget {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Padding(
-              padding: EdgeInsets.only(left: 4, bottom: 8),
-              child: Text('Spielertabelle',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-            ),
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: DataTable(
-                headingRowHeight: 38,
-                dataRowMinHeight: 42,
-                dataRowMaxHeight: 46,
-                columns: const [
-                  DataColumn(label: Text('#')),
-                  DataColumn(label: Text('Spieler')),
-                  DataColumn(label: Text('Würfe'), numeric: true),
-                  DataColumn(label: Text('Tore'), numeric: true),
-                  DataColumn(label: Text('Quote'), numeric: true),
-                  DataColumn(label: Text('7m'), numeric: true),
-                  DataColumn(label: Text('Geblockt'), numeric: true),
-                  DataColumn(label: Text('Technik'), numeric: true),
-                  DataColumn(label: Text('BV'), numeric: true),
-                  DataColumn(label: Text('Gefoult'), numeric: true),
-                  DataColumn(label: Text('7m geholt'), numeric: true),
-                  DataColumn(label: Text('Duelle'), numeric: true),
-                  DataColumn(label: Text('Paraden'), numeric: true),
-                  DataColumn(label: Text('P-Quote'), numeric: true),
-                  DataColumn(label: Text('GT'), numeric: true),
-                  DataColumn(label: Text('Gelb'), numeric: true),
-                  DataColumn(label: Text('2min'), numeric: true),
-                  DataColumn(label: Text('Rot'), numeric: true),
-                  DataColumn(label: Text('Blau'), numeric: true),
-                ],
-                rows: [
-                  for (final player in players)
-                    DataRow(cells: _cellsFor(player)),
-                ],
-              ),
-            ),
-          ],
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: DataTable(
+            headingRowHeight: 38,
+            dataRowMinHeight: 42,
+            dataRowMaxHeight: 46,
+            columns: const [
+              DataColumn(label: Text('#')),
+              DataColumn(label: Text('Spieler')),
+              DataColumn(label: Text('Würfe'), numeric: true),
+              DataColumn(label: Text('Tore'), numeric: true),
+              DataColumn(label: Text('Quote'), numeric: true),
+              DataColumn(label: Text('7m'), numeric: true),
+              DataColumn(label: Text('Geblockt'), numeric: true),
+              DataColumn(label: Text('Technik'), numeric: true),
+              DataColumn(label: Text('BV'), numeric: true),
+              DataColumn(label: Text('Gefoult'), numeric: true),
+              DataColumn(label: Text('7m geholt'), numeric: true),
+              DataColumn(label: Text('Duelle'), numeric: true),
+              DataColumn(label: Text('Paraden'), numeric: true),
+              DataColumn(label: Text('P-Quote'), numeric: true),
+              DataColumn(label: Text('GT'), numeric: true),
+              DataColumn(label: Text('Gelb'), numeric: true),
+              DataColumn(label: Text('2min'), numeric: true),
+              DataColumn(label: Text('Rot'), numeric: true),
+              DataColumn(label: Text('Blau'), numeric: true),
+            ],
+            rows: [
+              for (final player in players)
+                DataRow(cells: _cellsFor(player)),
+            ],
+          ),
         ),
       ),
     );
@@ -398,11 +595,22 @@ class _PlayerTable extends StatelessWidget {
   }
 }
 
+// ------------------------------------------------------------------ Export
+
 class _ExportMenu extends StatelessWidget {
-  const _ExportMenu({required this.match, required this.team});
+  const _ExportMenu({
+    required this.match,
+    required this.team,
+    required this.captureOverview,
+    required this.captureShotmap,
+    required this.captureTable,
+  });
 
   final Match match;
   final Team team;
+  final Future<Uint8List> Function() captureOverview;
+  final Future<Uint8List> Function() captureShotmap;
+  final Future<Uint8List> Function() captureTable;
 
   static final _exportService = ExportService();
 
@@ -416,7 +624,6 @@ class _ExportMenu extends StatelessWidget {
         );
         return;
       }
-      // Windows und Linux: Exporte im Dokumente-Ordner ablegen.
       final docs = await getApplicationDocumentsDirectory();
       final folder = Directory('${docs.path}${Platform.pathSeparator}SCF_Teamlog');
       await folder.create(recursive: true);
@@ -465,7 +672,17 @@ class _ExportMenu extends StatelessWidget {
               const SnackBar(content: Text('PDF wird erstellt ...')),
             );
             final bytes = await _exportService.matchPdf(match, team);
-            await _deliver(context, '${_baseName()}.pdf', bytes, 'application/pdf');
+            await _deliver(
+                context, '${_baseName()}.pdf', bytes, 'application/pdf');
+            break;
+          case 'img_overview':
+            await _captureAndDeliver(context, 'uebersicht', captureOverview);
+            break;
+          case 'img_shotmap':
+            await _captureAndDeliver(context, 'wurfbild', captureShotmap);
+            break;
+          case 'img_table':
+            await _captureAndDeliver(context, 'tabelle', captureTable);
             break;
         }
       },
@@ -491,7 +708,44 @@ class _ExportMenu extends StatelessWidget {
             title: Text('PDF-Bericht'),
           ),
         ),
+        PopupMenuDivider(),
+        PopupMenuItem(
+          value: 'img_overview',
+          child: ListTile(
+            leading: Icon(Icons.image_outlined),
+            title: Text('Bild: Übersicht'),
+          ),
+        ),
+        PopupMenuItem(
+          value: 'img_shotmap',
+          child: ListTile(
+            leading: Icon(Icons.gps_fixed),
+            title: Text('Bild: Wurfbild'),
+          ),
+        ),
+        PopupMenuItem(
+          value: 'img_table',
+          child: ListTile(
+            leading: Icon(Icons.grid_on_outlined),
+            title: Text('Bild: Tabelle'),
+          ),
+        ),
       ],
     );
+  }
+
+  Future<void> _captureAndDeliver(BuildContext context, String suffix,
+      Future<Uint8List> Function() capture) async {
+    try {
+      final bytes = await capture();
+      await _deliver(
+          context, '${_baseName()}_$suffix.png', bytes, 'image/png');
+    } catch (error) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Bild-Export fehlgeschlagen: $error')),
+        );
+      }
+    }
   }
 }

@@ -7,17 +7,19 @@ import '../../../data/models/match_event.dart';
 import '../../../data/models/player.dart';
 import '../../../data/models/team.dart';
 
-/// Letzte Ereignisse des Spiels, neueste zuerst.
+/// Letzte Ereignisse des Spiels, neueste zuerst. Tippen oeffnet Korrektur.
 class EventTimeline extends StatelessWidget {
   const EventTimeline({
     super.key,
     required this.match,
     required this.team,
-    this.maxEntries = 30,
+    this.onEventTap,
+    this.maxEntries = 40,
   });
 
   final Match match;
   final Team? team;
+  final void Function(MatchEvent event)? onEventTap;
   final int maxEntries;
 
   @override
@@ -29,11 +31,12 @@ class EventTimeline extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.history, color: ScfColors.textSecondary.withValues(alpha: 0.5)),
-            const SizedBox(height: 6),
+            Icon(Icons.timeline,
+                size: 34, color: ScfColors.textFaint.withValues(alpha: 0.6)),
+            const SizedBox(height: 8),
             const Text(
               'Noch keine Aktionen erfasst',
-              style: TextStyle(color: ScfColors.textSecondary, fontSize: 12.5),
+              style: TextStyle(color: ScfColors.textFaint, fontSize: 12.5),
             ),
           ],
         ),
@@ -44,9 +47,11 @@ class EventTimeline extends StatelessWidget {
       itemCount: events.length,
       separatorBuilder: (_, __) => const SizedBox(height: 4),
       itemBuilder: (context, index) {
+        final event = events[index];
         return _EventTile(
-          event: events[index],
-          player: team?.playerById(events[index].playerId),
+          event: event,
+          player: team?.playerById(event.playerId),
+          onTap: onEventTap == null ? null : () => onEventTap!(event),
         );
       },
     );
@@ -54,17 +59,29 @@ class EventTimeline extends StatelessWidget {
 }
 
 class _EventTile extends StatelessWidget {
-  const _EventTile({required this.event, required this.player});
+  const _EventTile({
+    required this.event,
+    required this.player,
+    this.onTap,
+  });
 
   final MatchEvent event;
   final Player? player;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final type = event.type;
-    final tone = type == MatchEventType.tor || type.isPositive
-        ? ScfColors.success
-        : (type.isSanction ? ScfColors.warning : ScfColors.danger);
+    final Color tone;
+    if (event.isOpponent) {
+      tone = ScfColors.cyan;
+    } else if (type == MatchEventType.tor || type.isPositive) {
+      tone = ScfColors.success;
+    } else if (type.isSanction) {
+      tone = ScfColors.warning;
+    } else {
+      tone = ScfColors.danger;
+    }
 
     final details = <String>[
       if (event.isSevenMeter) '7 m',
@@ -72,58 +89,69 @@ class _EventTile extends StatelessWidget {
       if (event.courtZone != null) event.courtZone!.label,
     ];
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: BoxDecoration(
-        color: ScfColors.surfaceRaised,
-        borderRadius: BorderRadius.circular(8),
-        border: Border(left: BorderSide(color: tone, width: 3)),
-      ),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 44,
-            child: Text(
-              AppFormatters.clock(event.matchClockSec),
-              style: const TextStyle(
-                color: ScfColors.textSecondary,
-                fontSize: 11.5,
-                fontFeatures: [FontFeature.tabularFigures()],
-              ),
-            ),
+    return Material(
+      color: ScfColors.surfaceRaised,
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border(left: BorderSide(color: tone, width: 3)),
           ),
-          Text(
-            '#${player?.number ?? '?'}',
-            style: const TextStyle(
-              fontWeight: FontWeight.w800,
-              fontSize: 12.5,
-              color: ScfColors.textPrimary,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              type.label,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: Color.lerp(tone, ScfColors.textPrimary, 0.45),
-                fontWeight: FontWeight.w600,
-                fontSize: 12.5,
-              ),
-            ),
-          ),
-          if (details.isNotEmpty)
-            Flexible(
-              child: Text(
-                details.join(' · '),
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: ScfColors.textSecondary,
-                  fontSize: 11.5,
+          child: Row(
+            children: [
+              SizedBox(
+                width: 42,
+                child: Text(
+                  AppFormatters.clock(event.matchClockSec),
+                  style: const TextStyle(
+                    color: ScfColors.textFaint,
+                    fontSize: 11,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
                 ),
               ),
-            ),
-        ],
+              if (event.isOpponent)
+                const Icon(Icons.person_outline,
+                    size: 13, color: ScfColors.cyan)
+              else
+                Text(
+                  '#${player?.number ?? '?'}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12,
+                    color: ScfColors.textPrimary,
+                  ),
+                ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  event.isOpponent ? 'Gegner: ${type.label}' : type.label,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Color.lerp(tone, ScfColors.textPrimary, 0.45),
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+              if (details.isNotEmpty)
+                Flexible(
+                  child: Text(
+                    details.join(' · '),
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: ScfColors.textFaint,
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }

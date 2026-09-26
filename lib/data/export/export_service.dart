@@ -95,6 +95,69 @@ class ExportService {
     return buffer.toString();
   }
 
+  /// Alltime-Tabelle eines Spielers ueber mehrere Spiele als CSV.
+  String playerMatchesCsv(List<Match> matches, Player player) {
+    final buffer = StringBuffer();
+    buffer.writeln([
+      'Datum',
+      'Gegner',
+      'Würfe',
+      'Tore',
+      'Quote %',
+      '7m Tore',
+      'Geblockt',
+      'Technikfehler',
+      'Ballverluste',
+      'Paraden',
+      'Gegentore',
+      'Gelb',
+      '2min',
+      'Rot',
+      'Blau',
+    ].join(csvSeparator));
+
+    var total = const PlayerStats();
+    for (final match in matches) {
+      final s = statsForPlayer(match, player);
+      total = PlayerStats.combine(total, s);
+      buffer.writeln([
+        AppFormatters.date(match.date),
+        _csv(match.opponentName),
+        s.shots,
+        s.goals,
+        _percent(s.shotRatio),
+        s.goalsSevenMeter,
+        s.blocked,
+        s.technicalErrors,
+        s.ballLosses,
+        s.saves,
+        s.conceded,
+        s.yellowCards,
+        s.twoMinutes,
+        s.redCards,
+        s.blueCards,
+      ].join(csvSeparator));
+    }
+    buffer.writeln([
+      '',
+      'GESAMT',
+      total.shots,
+      total.goals,
+      _percent(total.shotRatio),
+      total.goalsSevenMeter,
+      total.blocked,
+      total.technicalErrors,
+      total.ballLosses,
+      total.saves,
+      total.conceded,
+      total.yellowCards,
+      total.twoMinutes,
+      total.redCards,
+      total.blueCards,
+    ].join(csvSeparator));
+    return buffer.toString();
+  }
+
   /// Schlichter PDF-Bericht mit Spielinfo, Ergebnis und Spielertabelle.
   Future<Uint8List> matchPdf(Match match, Team team) async {
     final pdf = pw.Document();

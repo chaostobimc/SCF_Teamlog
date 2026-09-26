@@ -124,7 +124,7 @@ class _CourtPainter extends CustomPainter {
       final fill = Paint()
         ..color = isSel
             ? ScfColors.accent.withValues(alpha: 0.55)
-            : (isEven ? const Color(0xFF242E3B) : ScfColors.courtFill);
+            : (isEven ? ScfColors.courtZoneFill : ScfColors.courtFill);
 
       final startPhi = _phi(range[0]);
       final sweep = _phi(range[1]) - startPhi;
@@ -198,7 +198,15 @@ class _CourtPainter extends CustomPainter {
       final paint = Paint()
         ..color = switch (event.type) {
           MatchEventType.tor => ScfColors.success,
-          MatchEventType.fehlwurf => ScfColors.danger,
+          MatchEventType.parade ||
+          MatchEventType.paradeSiebenMeter ||
+          MatchEventType.paradeFreiwurf =>
+            ScfColors.cyan,
+          MatchEventType.gegentor ||
+          MatchEventType.gegentorSiebenMeter ||
+          MatchEventType.gegentorFreiwurf ||
+          MatchEventType.fehlwurf =>
+            ScfColors.danger,
           _ => ScfColors.textSecondary,
         };
       canvas.drawCircle(pos, 4.5, paint);

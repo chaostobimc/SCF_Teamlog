@@ -88,6 +88,11 @@ class PlayerStats {
   int get sanctions => yellowCards + twoMinutes + redCards + blueCards;
 
   PlayerStats accumulate(MatchEventType type, MatchEvent event) {
+    // Gegnerische Fehlwuerfe zaehlen nicht als eigene Wuerfe des Spielers.
+    if (event.isOpponent &&
+        (type == MatchEventType.fehlwurf || type == MatchEventType.wurfGeblockt)) {
+      return this;
+    }
     switch (type) {
       case MatchEventType.tor:
         return _copy(
@@ -272,4 +277,138 @@ PlayerStats statsForPlayer(Match match, Player player) {
     stats = stats.accumulate(event.type, event);
   }
   return stats;
+}
+
+/// Wurfbild des Torwarts: wohin geworfen wurde und von wo.
+class KeeperShotMap {
+  const KeeperShotMap({
+    this.goalZones = const {},
+    this.originsOnTarget = const {},
+    this.originMisses = const {},
+  });
+
+  /// Torzonen: [ZoneTally.saved] = Paraden, [ZoneTally.goals] = Gegentore.
+  final Map<GoalZone, ZoneTally> goalZones;
+
+  /// Wurfpositionen der gehaltenen/erzielten Schuesse.
+  final Map<CourtZone, ZoneTally> originsOnTarget;
+
+  /// Verfehlte/blockierte Gegnerwuerfe je Wurfposition.
+  final Map<CourtZone, int> originMisses;
+
+  int get saves {
+    var n = 0;
+    for (final tally in goalZones.values) {
+      n += tally.saved;
+    }
+    return n;
+  }
+
+  int get conceded {
+    var n = 0;
+    for (final tally in goalZones.values) {
+      n += tally.goals;
+    }
+    return n;
+  }
+
+  int get shotsOnTarget => saves + conceded;
+
+  int get shotsFaced {
+    var n = shotsOnTarget;
+    for (final miss in originMisses.values) {
+      n += miss;
+    }
+    return n;
+  }
+
+  double get saveRatio => shotsOnTarget == 0 ? double.nan : saves / shotsOnTarget;
+}
+
+/// Wurfbild ueber alle Gegnerwuerfe eines Spiels (optionale Einschraenkung
+/// auf einen bestimmten Torwart).
+KeeperShotMap keeperShotMap(Match match, {String? goalkeeperId}) {
+  final goalZones = <GoalZone, ZoneTally>{};
+  final originsOnTarget = <CourtZone, ZoneTally>{};
+  final originMisses = <CourtZone, int>{};
+
+  for (final event in match.events) {
+    if (!event.isOpponent) continue;
+    if (goalkeeperId != null && event.playerId != goalkeeperId) continue;
+
+    final isMiss = event.type == MatchEventType.fehlwurf ||
+        event.type == MatchEventType.wurfGeblockt;
+    final isGoal = event.type == MatchEventType.gegentor ||
+        event.type == MatchEventType.gegentorSiebenMeter ||
+        event.type == MatchEventType.gegentorFreiwurf;
+
+    if (isMiss) {
+      final zone = event.courtZone;
+      if (zone != null) {
+        originMisses[zone] = (originMisses[zone] ?? 0) + 1;
+      }
+      continue;
+    }
+
+    final goalZone = event.goalZone;
+    if (goalZone != null && goalZone.isOnTarget) {
+      goalZones[goalZone] =
+          (goalZones[goalZone] ?? const ZoneTally()).add(goal: isGoal);
+    }
+    final origin = event.courtZone;
+    if (origin != null) {
+      originsOnTarget[origin] =
+          (originsOnTarget[origin] ?? const ZoneTally()).add(goal: isGoal);
+    }
+  }
+
+  return KeeperShotMap(
+    goalZones: goalZones,
+    originsOnTarget: originsOnTarget,
+    originMisses: originMisses,
+  );
+}
+
+/// Laufende 2-Minuten-Strafen bei aktueller Spielzeit.
+class ActivePenalty {
+  const ActivePenalty({required this.event, required this.endsAtSec});
+
+  final MatchEvent event;
+  final int endsAtSec;
+
+  int remainingSec(int matchClockSec) {
+    final left = endsAtSec - matchClockSec;
+    return left < 0 ? 0 : left;
+  }
+
+  bool isActive(int matchClockSec) => endsAtSec > matchClockSec;
+}
+
+List<ActivePenalty> activePenalties(Match match) {
+  final result = <ActivePenalty>[];
+  for (final event in match.events) {
+    if (event.type != MatchEventType.zeitstrafe || event.isOpponent) continue;
+    final endsAt = event.matchClockSec + 120;
+    final penalty = ActivePenalty(event: event, endsAtSec: endsAt);
+    if (penalty.isActive(match.matchClockSec)) result.add(penalty);
+  }
+  return result;
+}
+
+/// Summiert die Statistik eines Spielers ueber alle Spiele hinweg.
+PlayerStats allTimeStatsForPlayer(List<Match> matches, Player player) {
+  var stats = const PlayerStats();
+  for (final match in matches) {
+    stats = PlayerStats.combine(stats, statsForPlayer(match, player));
+  }
+  return stats;
+}
+
+/// Alltime-Statistik je Spieler.
+Map<String, PlayerStats> allTimeStats(List<Match> matches, Team team) {
+  final result = <String, PlayerStats>{};
+  for (final player in team.players) {
+    result[player.id] = allTimeStatsForPlayer(matches, player);
+  }
+  return result;
 }

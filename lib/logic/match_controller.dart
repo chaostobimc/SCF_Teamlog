@@ -300,8 +300,10 @@ class MatchController extends StateNotifier<MatchState> {
         playerId: player.id,
         type: mapped,
         goalZone: pending.goalZone,
+        courtZone: pending.courtZone,
         isSevenMeter: pending.isSevenMeter,
         isFreeThrow: pending.isFreeThrow,
+        isOpponent: true,
       );
       return;
     }
@@ -352,9 +354,29 @@ class MatchController extends StateNotifier<MatchState> {
     _recordEvent(
       playerId: player.id,
       type: type,
-      courtZone: isKeeperEvent ? null : _contextCourtZone(),
+      courtZone: isKeeperEvent ? state.lastCourtZone : _contextCourtZone(),
       isSevenMeter: state.lastCourtZone == CourtZone.siebenMeter,
       isFreeThrow: state.lastCourtZone == CourtZone.freiwurf,
+      isOpponent: isKeeperEvent,
+    );
+  }
+
+  /// Gegner hat geworfen und verfehlt bzw. wurde geblockt
+  /// (zaehlt nur ins Wurfbild des Torwarts).
+  void commitOpponentAction(MatchEventType type) {
+    if (!_canRecord) return;
+    final player = _selectedPlayer();
+    if (player == null || player.position != PlayerPosition.torwart) {
+      _notify('Torhüter auswählen');
+      return;
+    }
+    _recordEvent(
+      playerId: player.id,
+      type: type,
+      courtZone: _contextCourtZone(),
+      isSevenMeter: state.lastCourtZone == CourtZone.siebenMeter,
+      isFreeThrow: state.lastCourtZone == CourtZone.freiwurf,
+      isOpponent: true,
     );
   }
 
@@ -366,6 +388,31 @@ class MatchController extends StateNotifier<MatchState> {
     state = state.copyWith(
       match: saved,
       notice: 'Aktion zurückgenommen',
+      noticeStamp: DateTime.now().millisecondsSinceEpoch,
+    );
+  }
+
+  /// Einzelnes Ereignis entfernen (Korrektur ueber die Ereignisliste).
+  void removeEvent(String eventId) {
+    final events = state.match.events;
+    if (!events.any((e) => e.id == eventId)) return;
+    final updated = state.match.copyWith(
+      events: events.where((e) => e.id != eventId).toList(),
+    );
+    final saved = _commit(updated, keepClockRunning: state.running);
+    state = state.copyWith(
+      match: saved,
+      notice: 'Aktion gelöscht',
+      noticeStamp: DateTime.now().millisecondsSinceEpoch,
+    );
+  }
+
+  /// Auszeit: Uhr anhalten und melden.
+  void timeout() {
+    if (state.match.status != MatchStatus.laufend) return;
+    if (state.running) _pause();
+    state = state.copyWith(
+      notice: 'Auszeit',
       noticeStamp: DateTime.now().millisecondsSinceEpoch,
     );
   }
@@ -392,6 +439,7 @@ class MatchController extends StateNotifier<MatchState> {
     CourtZone? courtZone,
     bool isSevenMeter = false,
     bool isFreeThrow = false,
+    bool isOpponent = false,
   }) {
     final match = state.match;
     final event = MatchEvent(
@@ -401,6 +449,7 @@ class MatchController extends StateNotifier<MatchState> {
       matchClockSec: match.matchClockSec,
       phase: match.phase,
       isSevenMeter: isSevenMeter,
+      isOpponent: isOpponent,
       goalZone: goalZone,
       courtZone: courtZone,
       createdAt: DateTime.now(),

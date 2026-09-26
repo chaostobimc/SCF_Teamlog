@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/app_formatters.dart';
 import '../../data/models/match_event.dart';
 import '../../logic/match_controller.dart';
 import '../../logic/match_state.dart';
@@ -21,6 +23,68 @@ class LiveMatchScreen extends ConsumerWidget {
 
   final String matchId;
 
+  void _selectPlayerByIndex(MatchState state, MatchController controller, int index) {
+    final team = state.team;
+    if (team == null) return;
+    final players = team.fieldPlayers
+      ..sort((a, b) => a.number.compareTo(b.number));
+    if (index < players.length) {
+      controller.selectPlayer(players[index].id);
+    }
+  }
+
+  Future<void> _showEventDialog(BuildContext context, MatchState state,
+      MatchEvent event, MatchController controller) async {
+    final player = state.team?.playerById(event.playerId);
+    final action = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(event.isOpponent
+            ? 'Gegner: ${event.type.label}'
+            : event.type.label),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${AppFormatters.clock(event.matchClockSec)} · ${event.phase.label}'
+              '${player == null ? '' : ' · ${player.fullName} (#${player.number})'}',
+              style: ScfText.caption,
+            ),
+            if (event.goalZone != null || event.courtZone != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  [
+                    if (event.isSevenMeter) '7 Meter',
+                    if (event.goalZone != null) 'Torzone: ${event.goalZone!.label}',
+                    if (event.courtZone != null)
+                      'Position: ${event.courtZone!.label}',
+                  ].join('  ·  '),
+                  style: ScfText.caption,
+                ),
+              ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Schließen'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: ScfColors.danger,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(context, 'delete'),
+            child: const Text('Aktion löschen'),
+          ),
+        ],
+      ),
+    );
+    if (action == 'delete') controller.removeEvent(event.id);
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(matchControllerProvider(matchId));
@@ -32,7 +96,10 @@ class LiveMatchScreen extends ConsumerWidget {
         if (previous?.noticeStamp != next.noticeStamp && next.notice != null) {
           ScaffoldMessenger.of(context)
             ..hideCurrentSnackBar()
-            ..showSnackBar(SnackBar(content: Text(next.notice!), duration: const Duration(seconds: 2)));
+            ..showSnackBar(SnackBar(
+              content: Text(next.notice!),
+              duration: const Duration(seconds: 2),
+            ));
         }
       },
     );
@@ -48,19 +115,22 @@ class LiveMatchScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('${team?.name ?? 'Team'} - ${match.opponentName}'),
+        title: Text('${team.name} – ${match.opponentName}'),
         actions: [
           IconButton(
-            tooltip: 'Letzte Aktion zurücknehmen',
+            tooltip: 'Letzte Aktion zurücknehmen (Z)',
             onPressed: match.events.isEmpty ? null : controller.undoLastEvent,
             icon: const Icon(Icons.undo),
+          ),
+          IconButton(
+            tooltip: 'Auswertung',
+            onPressed: () => Navigator.of(context)
+                .pushNamed(AppRoutes.matchStats, arguments: matchId),
+            icon: const Icon(Icons.insights_outlined),
           ),
           PopupMenuButton<String>(
             onSelected: (value) async {
               switch (value) {
-                case 'stats':
-                  Navigator.of(context).pushNamed(AppRoutes.matchStats, arguments: matchId);
-                  break;
                 case 'finish':
                   final confirmed = await showDialog<bool>(
                     context: context,
@@ -82,36 +152,83 @@ class LiveMatchScreen extends ConsumerWidget {
                   );
                   if (confirmed == true) controller.finishMatch();
                   break;
+                case 'shortcuts':
+                  showDialog<void>(
+                    context: context,
+                    builder: (context) => const _ShortcutsDialog(),
+                  );
+                  break;
               }
             },
             itemBuilder: (context) => const [
-              PopupMenuItem(value: 'stats', child: Text('Auswertung anzeigen')),
+              PopupMenuItem(value: 'shortcuts', child: Text('Tastaturkürzel')),
               PopupMenuItem(value: 'finish', child: Text('Spiel beenden')),
             ],
           ),
         ],
       ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final width = constraints.maxWidth;
-          if (width >= 1100) {
-            return _WideLayout(state: state, controller: controller);
-          }
-          if (width >= 640) {
-            return _MediumLayout(state: state, controller: controller);
-          }
-          return _CompactLayout(state: state, controller: controller);
+      body: CallbackShortcuts(
+        bindings: {
+          SingleActivator(LogicalKeyboardKey.space): controller.toggleClock,
+          SingleActivator(LogicalKeyboardKey.keyZ): controller.undoLastEvent,
+          SingleActivator(LogicalKeyboardKey.escape): controller.cancelPendingShot,
+          SingleActivator(LogicalKeyboardKey.digit1):
+              () => _selectPlayerByIndex(state, controller, 0),
+          SingleActivator(LogicalKeyboardKey.digit2):
+              () => _selectPlayerByIndex(state, controller, 1),
+          SingleActivator(LogicalKeyboardKey.digit3):
+              () => _selectPlayerByIndex(state, controller, 2),
+          SingleActivator(LogicalKeyboardKey.digit4):
+              () => _selectPlayerByIndex(state, controller, 3),
+          SingleActivator(LogicalKeyboardKey.digit5):
+              () => _selectPlayerByIndex(state, controller, 4),
+          SingleActivator(LogicalKeyboardKey.digit6):
+              () => _selectPlayerByIndex(state, controller, 5),
+          SingleActivator(LogicalKeyboardKey.digit7):
+              () => _selectPlayerByIndex(state, controller, 6),
+          SingleActivator(LogicalKeyboardKey.digit8):
+              () => _selectPlayerByIndex(state, controller, 7),
+          SingleActivator(LogicalKeyboardKey.digit9):
+              () => _selectPlayerByIndex(state, controller, 8),
         },
+        child: Focus(
+          autofocus: true,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final width = constraints.maxWidth;
+              if (width >= 1100) {
+                return _WideLayout(
+                    state: state,
+                    controller: controller,
+                    onEventTap: (e) => _showEventDialog(context, state, e, controller));
+              }
+              if (width >= 640) {
+                return _MediumLayout(
+                    state: state,
+                    controller: controller,
+                    onEventTap: (e) => _showEventDialog(context, state, e, controller));
+              }
+              return _CompactLayout(
+                  state: state,
+                  controller: controller,
+                  onEventTap: (e) => _showEventDialog(context, state, e, controller));
+            },
+          ),
+        ),
       ),
     );
   }
 }
-
 class _WideLayout extends StatelessWidget {
-  const _WideLayout({required this.state, required this.controller});
+  const _WideLayout({
+    required this.state,
+    required this.controller,
+    required this.onEventTap,
+  });
 
   final MatchState state;
   final MatchController controller;
+  final void Function(MatchEvent event) onEventTap;
 
   @override
   Widget build(BuildContext context) {
@@ -121,7 +238,7 @@ class _WideLayout extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           SizedBox(
-            width: 235,
+            width: 240,
             child: Card(
               child: Padding(
                 padding: const EdgeInsets.all(12),
@@ -147,15 +264,16 @@ class _WideLayout extends StatelessWidget {
                         flex: 3,
                         child: Card(
                           child: SingleChildScrollView(
-                            padding: const EdgeInsets.all(14),
+                            padding: const EdgeInsets.all(16),
                             child: Column(
                               children: [
                                 GoalGrid(
                                   onZoneTap: controller.onGoalZoneTap,
                                   zones: _zones(state),
                                   showTallies: true,
+                                  selectedZone: state.pendingShot?.goalZone,
                                 ),
-                                const SizedBox(height: 14),
+                                const SizedBox(height: 16),
                                 HandballCourt(
                                   onZoneTap: controller.onCourtZoneTap,
                                   selectedZone: _courtSelection(state),
@@ -175,6 +293,7 @@ class _WideLayout extends StatelessWidget {
                             child: EventTimeline(
                               match: state.match,
                               team: state.team,
+                              onEventTap: onEventTap,
                             ),
                           ),
                         ),
@@ -187,7 +306,7 @@ class _WideLayout extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           SizedBox(
-            width: 320,
+            width: 330,
             child: ActionPanel(state: state, controller: controller),
           ),
         ],
@@ -197,10 +316,15 @@ class _WideLayout extends StatelessWidget {
 }
 
 class _MediumLayout extends StatelessWidget {
-  const _MediumLayout({required this.state, required this.controller});
+  const _MediumLayout({
+    required this.state,
+    required this.controller,
+    required this.onEventTap,
+  });
 
   final MatchState state;
   final MatchController controller;
+  final void Function(MatchEvent event) onEventTap;
 
   @override
   Widget build(BuildContext context) {
@@ -210,7 +334,7 @@ class _MediumLayout extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           SizedBox(
-            width: 205,
+            width: 210,
             child: Card(
               child: Padding(
                 padding: const EdgeInsets.all(10),
@@ -233,6 +357,7 @@ class _MediumLayout extends StatelessWidget {
                     onZoneTap: controller.onGoalZoneTap,
                     zones: _zones(state),
                     showTallies: true,
+                    selectedZone: state.pendingShot?.goalZone,
                   ),
                   const SizedBox(height: 10),
                   HandballCourt(
@@ -241,11 +366,15 @@ class _MediumLayout extends StatelessWidget {
                     events: state.match.events,
                   ),
                   SizedBox(
-                    height: 190,
+                    height: 200,
                     child: Card(
                       child: Padding(
                         padding: const EdgeInsets.all(10),
-                        child: EventTimeline(match: state.match, team: state.team),
+                        child: EventTimeline(
+                          match: state.match,
+                          team: state.team,
+                          onEventTap: onEventTap,
+                        ),
                       ),
                     ),
                   ),
@@ -255,7 +384,7 @@ class _MediumLayout extends StatelessWidget {
           ),
           const SizedBox(width: 10),
           SizedBox(
-            width: 280,
+            width: 300,
             child: ActionPanel(state: state, controller: controller),
           ),
         ],
@@ -265,10 +394,15 @@ class _MediumLayout extends StatelessWidget {
 }
 
 class _CompactLayout extends StatelessWidget {
-  const _CompactLayout({required this.state, required this.controller});
+  const _CompactLayout({
+    required this.state,
+    required this.controller,
+    required this.onEventTap,
+  });
 
   final MatchState state;
   final MatchController controller;
+  final void Function(MatchEvent event) onEventTap;
 
   @override
   Widget build(BuildContext context) {
@@ -281,7 +415,8 @@ class _CompactLayout extends StatelessWidget {
             const SizedBox(height: 10),
             Card(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
                 child: PlayerBench(
                   team: state.team!,
                   selectedPlayerId: state.selectedPlayerId,
@@ -295,6 +430,7 @@ class _CompactLayout extends StatelessWidget {
               onZoneTap: controller.onGoalZoneTap,
               zones: _zones(state),
               showTallies: true,
+              selectedZone: state.pendingShot?.goalZone,
             ),
             const SizedBox(height: 10),
             HandballCourt(
@@ -304,9 +440,67 @@ class _CompactLayout extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             ActionPanel(state: state, controller: controller),
+            const SizedBox(height: 10),
+            SizedBox(
+              height: 220,
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(10),
+                  child: EventTimeline(
+                    match: state.match,
+                    team: state.team,
+                    onEventTap: onEventTap,
+                  ),
+                ),
+              ),
+            ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _ShortcutsDialog extends StatelessWidget {
+  const _ShortcutsDialog();
+
+  @override
+  Widget build(BuildContext context) {
+    const rows = [
+      ['Leertaste', 'Spieluhr starten/pause'],
+      ['Z', 'Letzte Aktion zurücknehmen'],
+      ['Esc', 'Wurf-Auswahl abbrechen'],
+      ['1 – 9', 'Spieler nach Nummer wählen'],
+    ];
+    return AlertDialog(
+      title: const Text('Tastaturkürzel'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final row in rows)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 90,
+                    child: Text(row[0],
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: ScfColors.textPrimary)),
+                  ),
+                  Expanded(child: Text(row[1], style: ScfText.caption)),
+                ],
+              ),
+            ),
+        ],
+      ),
+      actions: [
+        FilledButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('OK'),
+        ),
+      ],
     );
   }
 }

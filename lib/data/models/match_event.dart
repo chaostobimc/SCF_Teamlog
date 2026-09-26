@@ -207,6 +207,7 @@ class MatchEvent {
     required this.matchClockSec,
     required this.phase,
     this.isSevenMeter = false,
+    this.isOpponent = false,
     this.goalZone,
     this.courtZone,
     required this.createdAt,
@@ -222,6 +223,10 @@ class MatchEvent {
 
   /// Wurf gehoerte zu einem 7-Meter.
   final bool isSevenMeter;
+
+  /// Aktion des Gegners (Gegnerwurf fuer das Wurfbild des Torwarts).
+  /// [playerId] zeigt dann auf den Torwart, der den Wurf gesehen hat.
+  final bool isOpponent;
   final GoalZone? goalZone;
   final CourtZone? courtZone;
   final DateTime createdAt;
@@ -232,6 +237,7 @@ class MatchEvent {
     int? matchClockSec,
     MatchPhase? phase,
     bool? isSevenMeter,
+    bool? isOpponent,
     GoalZone? goalZone,
     CourtZone? courtZone,
   }) {
@@ -242,6 +248,7 @@ class MatchEvent {
       matchClockSec: matchClockSec ?? this.matchClockSec,
       phase: phase ?? this.phase,
       isSevenMeter: isSevenMeter ?? this.isSevenMeter,
+      isOpponent: isOpponent ?? this.isOpponent,
       goalZone: goalZone ?? this.goalZone,
       courtZone: courtZone ?? this.courtZone,
       createdAt: createdAt,
@@ -258,6 +265,7 @@ class MatchEvent {
       matchClockSec: (map['matchClockSec'] as int?) ?? 0,
       phase: MatchPhase.values[(map['phase'] as int?) ?? 0],
       isSevenMeter: (map['isSevenMeter'] as bool?) ?? false,
+      isOpponent: (map['isOpponent'] as bool?) ?? false,
       goalZone: goalZoneIdx == null ? null : GoalZone.values[goalZoneIdx],
       courtZone: courtZoneIdx == null ? null : CourtZone.values[courtZoneIdx],
       createdAt:
@@ -273,6 +281,7 @@ class MatchEvent {
       'matchClockSec': matchClockSec,
       'phase': phase.index,
       'isSevenMeter': isSevenMeter,
+      'isOpponent': isOpponent,
       'goalZone': goalZone?.index,
       'courtZone': courtZone?.index,
       'createdAt': createdAt.millisecondsSinceEpoch,

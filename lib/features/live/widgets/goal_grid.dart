@@ -4,6 +4,9 @@ import '../../../core/theme/app_theme.dart';
 import '../../../data/models/match_event.dart';
 import '../../../logic/stats_calculator.dart';
 
+/// Farbgebung der Zonen: Schuetze (gruen = Tore) oder Torwart (gruen = Paraden).
+enum GoalGridMode { shooter, goalkeeper }
+
 /// Tor-Raster mit den sechs Tresorzonen plus Daneben-Zonen.
 class GoalGrid extends StatelessWidget {
   const GoalGrid({
@@ -13,6 +16,7 @@ class GoalGrid extends StatelessWidget {
     this.zones,
     this.showTallies = false,
     this.enabled = true,
+    this.mode = GoalGridMode.shooter,
   });
 
   final ValueChanged<GoalZone> onZoneTap;
@@ -20,10 +24,11 @@ class GoalGrid extends StatelessWidget {
   final Map<GoalZone, ZoneTally>? zones;
   final bool showTallies;
   final bool enabled;
+  final GoalGridMode mode;
 
-  static const double cellWidth = 64;
-  static const double cellHeight = 44;
-  static const double frameHeight = 2 * (cellHeight + 3) + 5 + 10;
+  static const double cellWidth = 68;
+  static const double cellHeight = 46;
+  static const double frameHeight = 2 * (cellHeight + 3) + 8 + 12;
 
   static const List<GoalZone> _inner = [
     GoalZone.obenLinks,
@@ -46,6 +51,7 @@ class GoalGrid extends StatelessWidget {
         ),
         Row(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _OuterColumn(
               zone: GoalZone.linksDaneben,
@@ -53,23 +59,26 @@ class GoalGrid extends StatelessWidget {
               zones: zones,
               showTallies: showTallies,
               enabled: enabled,
+              mode: mode,
               onTap: onZoneTap,
             ),
-            const SizedBox(width: 3),
+            const SizedBox(width: 4),
             _GoalFrame(
               selected: selectedZone,
               zones: zones,
               showTallies: showTallies,
               enabled: enabled,
+              mode: mode,
               onTap: onZoneTap,
             ),
-            const SizedBox(width: 3),
+            const SizedBox(width: 4),
             _OuterColumn(
               zone: GoalZone.rechtsDaneben,
               selected: selectedZone,
               zones: zones,
               showTallies: showTallies,
               enabled: enabled,
+              mode: mode,
               onTap: onZoneTap,
             ),
           ],
@@ -85,6 +94,7 @@ class _GoalFrame extends StatelessWidget {
     required this.zones,
     required this.showTallies,
     required this.enabled,
+    required this.mode,
     required this.onTap,
   });
 
@@ -92,15 +102,23 @@ class _GoalFrame extends StatelessWidget {
   final Map<GoalZone, ZoneTally>? zones;
   final bool showTallies;
   final bool enabled;
+  final GoalGridMode mode;
   final ValueChanged<GoalZone> onTap;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(5),
+      padding: const EdgeInsets.all(6),
       decoration: BoxDecoration(
         color: ScfColors.goalFrame,
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.35),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -116,16 +134,22 @@ class _GoalFrame extends StatelessWidget {
                     zones: zones,
                     showTallies: showTallies,
                     enabled: enabled,
+                    mode: mode,
                     onTap: onTap,
                   ),
               ],
             ),
-            if (row == 0) const SizedBox(height: 5),
+            if (row == 0) const SizedBox(height: 6),
           ],
         ],
       ),
     );
   }
+}
+
+String _cellText(ZoneTally tally, GoalGridMode mode) {
+  final primary = mode == GoalGridMode.shooter ? tally.goals : tally.saved;
+  return '$primary/${tally.total}';
 }
 
 class _Cell extends StatelessWidget {
@@ -135,6 +159,7 @@ class _Cell extends StatelessWidget {
     required this.zones,
     required this.showTallies,
     required this.enabled,
+    required this.mode,
     required this.onTap,
   });
 
@@ -143,44 +168,64 @@ class _Cell extends StatelessWidget {
   final Map<GoalZone, ZoneTally>? zones;
   final bool showTallies;
   final bool enabled;
+  final GoalGridMode mode;
   final ValueChanged<GoalZone> onTap;
 
   @override
   Widget build(BuildContext context) {
     final tally = zones?[zone];
     final isSelected = selected == zone;
-    Color fill = ScfColors.surfaceCard;
-    if (tally != null && showTallies && tally.total > 0) {
-      fill = tally.goals > 0
-          ? ScfColors.success.withValues(alpha: 0.30)
-          : ScfColors.danger.withValues(alpha: 0.30);
+    final hasData = tally != null && showTallies && tally.total > 0;
+
+    Color fill = ScfColors.goalCell;
+    if (hasData) {
+      final positive =
+          mode == GoalGridMode.shooter ? tally.goals > 0 : tally.saved > 0;
+      fill = positive
+          ? ScfColors.success.withValues(alpha: 0.28)
+          : ScfColors.danger.withValues(alpha: 0.28);
     }
     if (isSelected) fill = ScfColors.accent;
 
-    return GestureDetector(
-      onTap: enabled ? () => onTap(zone) : null,
-      child: Container(
-        width: GoalGrid.cellWidth,
-        height: GoalGrid.cellHeight,
-        margin: const EdgeInsets.all(1.5),
-        decoration: BoxDecoration(
-          color: fill,
-          border: Border.all(
-            color: isSelected ? ScfColors.textPrimary : ScfColors.goalNet,
-            width: isSelected ? 2 : 1,
+    return MouseRegion(
+      cursor: enabled ? SystemMouseCursors.click : MouseCursor.defer,
+      child: GestureDetector(
+        onTap: enabled ? () => onTap(zone) : null,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          width: GoalGrid.cellWidth,
+          height: GoalGrid.cellHeight,
+          margin: const EdgeInsets.all(1.5),
+          decoration: BoxDecoration(
+            color: fill,
+            border: Border.all(
+              color: isSelected
+                  ? ScfColors.textPrimary
+                  : (hasData ? ScfColors.outline : const Color(0xFF243244)),
+              width: isSelected ? 2.2 : 1,
+            ),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: ScfColors.accent.withValues(alpha: 0.45),
+                      blurRadius: 10,
+                    ),
+                  ]
+                : null,
           ),
+          alignment: Alignment.center,
+          child: hasData
+              ? Text(
+                  _cellText(tally!, mode),
+                  style: const TextStyle(
+                    color: ScfColors.textPrimary,
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w800,
+                    fontFeatures: [FontFeature.tabularFigures()],
+                  ),
+                )
+              : null,
         ),
-        alignment: Alignment.center,
-        child: tally != null && showTallies && tally.total > 0
-            ? Text(
-                '${tally.goals}/${tally.total}',
-                style: const TextStyle(
-                  color: ScfColors.textPrimary,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
-              )
-            : null,
       ),
     );
   }
@@ -193,6 +238,7 @@ class _OuterColumn extends StatelessWidget {
     required this.zones,
     required this.showTallies,
     required this.enabled,
+    required this.mode,
     required this.onTap,
   });
 
@@ -201,6 +247,7 @@ class _OuterColumn extends StatelessWidget {
   final Map<GoalZone, ZoneTally>? zones;
   final bool showTallies;
   final bool enabled;
+  final GoalGridMode mode;
   final ValueChanged<GoalZone> onTap;
 
   @override
@@ -210,33 +257,36 @@ class _OuterColumn extends StatelessWidget {
     Color fill = ScfColors.surfaceRaised;
     if (isSelected) fill = ScfColors.accentDim;
 
-    return GestureDetector(
-      onTap: enabled ? () => onTap(zone) : null,
-      child: Container(
-        width: 26,
-        height: GoalGrid.frameHeight - 10,
-        margin: const EdgeInsets.symmetric(vertical: 5),
-        decoration: BoxDecoration(
-          color: fill,
-          border: Border.all(
-            color: isSelected ? ScfColors.textPrimary : ScfColors.outline,
+    return MouseRegion(
+      cursor: enabled ? SystemMouseCursors.click : MouseCursor.defer,
+      child: GestureDetector(
+        onTap: enabled ? () => onTap(zone) : null,
+        child: Container(
+          width: 30,
+          height: GoalGrid.frameHeight,
+          decoration: BoxDecoration(
+            color: fill,
+            border: Border.all(
+              color: isSelected ? ScfColors.textPrimary : ScfColors.outline,
+            ),
+            borderRadius: BorderRadius.circular(6),
           ),
-          borderRadius: BorderRadius.circular(3),
+          alignment: Alignment.center,
+          child: RotatedBox(
+            quarterTurns: -1,
+            child: Text(
+              tally != null && tally.total > 0
+                  ? _cellText(tally, mode)
+                  : zone.label,
+              style: TextStyle(
+                color: isSelected ? ScfColors.textPrimary : ScfColors.textFaint,
+                fontSize: 9.5,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.8,
+              ),
+            ),
+          ),
         ),
-        alignment: Alignment.center,
-        child: tally != null && tally.total > 0
-            ? RotatedBox(
-                quarterTurns: -1,
-                child: Text(
-                  '${tally.goals}/${tally.total}',
-                  style: const TextStyle(
-                    color: ScfColors.textSecondary,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              )
-            : null,
       ),
     );
   }
@@ -257,24 +307,31 @@ class _DrueberStrip extends StatelessWidget {
   Widget build(BuildContext context) {
     final isSelected = selected == GoalZone.drueber;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 3, left: 29, right: 29),
-      child: GestureDetector(
-        onTap: enabled ? () => onTap(GoalZone.drueber) : null,
-        child: Container(
-          height: 18,
-          decoration: BoxDecoration(
-            color: isSelected ? ScfColors.accentDim : ScfColors.surfaceRaised,
-            border: Border.all(
-              color: isSelected ? ScfColors.textPrimary : ScfColors.outline,
+      padding: const EdgeInsets.only(bottom: 4, left: 34, right: 34),
+      child: MouseRegion(
+        cursor: enabled ? SystemMouseCursors.click : MouseCursor.defer,
+        child: GestureDetector(
+          onTap: enabled ? () => onTap(GoalZone.drueber) : null,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            height: 20,
+            decoration: BoxDecoration(
+              color: isSelected ? ScfColors.accentDim : ScfColors.surfaceRaised,
+              border: Border.all(
+                color: isSelected ? ScfColors.textPrimary : ScfColors.outline,
+              ),
+              borderRadius: BorderRadius.circular(6),
             ),
-            borderRadius: BorderRadius.circular(3),
-          ),
-          alignment: Alignment.center,
-          child: Text(
-            'Über die Latte',
-            style: TextStyle(
-              color: isSelected ? ScfColors.textPrimary : ScfColors.textSecondary,
-              fontSize: 10,
+            alignment: Alignment.center,
+            child: Text(
+              'ÜBER DIE LATTE',
+              style: TextStyle(
+                color:
+                    isSelected ? ScfColors.textPrimary : ScfColors.textFaint,
+                fontSize: 9,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.2,
+              ),
             ),
           ),
         ),

@@ -30,8 +30,10 @@ flutter build linux        # Linux (unter Linux)
   Positionen (Feldspieler/Torwart) und Rollen (Kreis, Rückraum, Außen).
 - **Spiele anlegen**: Gegner, Datum, Heim/Auswärts, Halbzeitlänge.
 - **Live-Match-Screen**:
-  - Stoppuhr mit Start/Pause, automatischem Halbzeitwechsel, Zeitstempel je Aktion.
-  - Spielerleiste mit Trikotnummern zur Schnellauswahl.
+  - Stoppuhr mit Start/Pause, automatischem Halbzeitwechsel, Auszeit-Button,
+    Zeitstempel je Aktion.
+  - Laufende 2-Minuten-Strafen als Countdown-Chips.
+  - Spielerleiste mit Trikotnummern zur Schnellauswahl (Tasten 1–9 am Desktop).
   - Interaktives Spielfeld: antippen der Wurfzone (Außen, Rückraum, Kreis, 7 m).
   - Tor-Raster: Trefferzone antippen, Ergebnis (Tor/Parade/Gehalten/Geblockt)
     oder automatischer Fehlwurf bei "Daneben".
@@ -39,12 +41,19 @@ flutter build linux        # Linux (unter Linux)
     Prellfehler, Stürmerfoul, Ballverlust, Gefoult, 7m herausgeholt,
     Duell gewonnen.
   - Aktionen Torhüter: Parade, Gegentor, 7m-Parade, Freiwurf gehalten.
+  - **Gegnerwürfe** für das Wurfbild des Torwarts: Zone im Tor, Wurfposition,
+    Ergebnis (Parade/Gegentor) plus "Gegner daneben/geblockt".
   - Sanktionen: Gelbe Karte, 2-Minuten-Strafe, Rote/Blaue Karte.
-  - Undo für die letzte Aktion.
+  - Undo (Taste Z), Einzelaktionen per Tippen auf die Ereignisliste löschen.
+  - Tastaturkürzel am Desktop (Leertaste, Z, Esc, 1–9).
 - **Auswertung**: Wurfquote, Paradenquote, Ballverluste, Zeitstrafen,
-  Trefferzonen-Heatmap, Spielertabelle – live während und nach dem Spiel.
-- **Export**: CSV (Ereignisse, Spielertabelle) und PDF-Bericht – auf Android
-  über den System-Dialog, unter Windows/Linux als Datei im Ordner
+  Trefferzonen-Heatmap, **Wurfbild des Torwarts** (Torzonen + Wurfpositionen
+  des Gegners), Spielertabelle – live während und nach dem Spiel.
+- **Spielerstatistiken**: pro Spiel **oder alltime** mit Aufschlüsselung
+  je Begegnung.
+- **Export**: CSV (Ereignisse, Spielertabelle, Spieler-Alltime) und
+  PDF-Bericht – dazu **Bildexport (PNG)** von Übersicht, Wurfbild und Tabelle.
+  Auf Android über den System-Dialog, unter Windows/Linux als Datei im Ordner
   `Dokumente/SCF_Teamlog`.
 - **Offline-First**: alle Daten lokal in Hive, keine Internetverbindung nötig.
 
@@ -72,7 +81,7 @@ lib/
     home/                    # Startübersicht
     match_setup/             # Neues Spiel anlegen
     live/                    # Live-Match-Screen + Widgets
-    stats/                   # Auswertung & Export
+    stats/                   # Auswertung, Wurfbild, Spielerstatistiken
     teams/                   # Teamliste & Teameditor
   routing/                   # Routen
 test/                        # Unit-Tests (Modelle, Logik, Geometrie)

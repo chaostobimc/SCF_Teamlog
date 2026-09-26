@@ -5,6 +5,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/utils/app_formatters.dart';
 import '../../data/models/match.dart';
 import '../../logic/providers.dart';
+import '../../logic/stats_calculator.dart';
 import '../../routing/app_router.dart';
 
 /// Startbildschirm: Spieluebersicht, Teams, neues Spiel.
@@ -163,14 +164,17 @@ class _MatchTile extends ConsumerWidget {
     final team = ref.watch(teamByIdProvider(match.ownTeamId));
     final statusColor = switch (match.status) {
       MatchStatus.laufend => ScfColors.success,
-      MatchStatus.geplant => ScfColors.info,
-      MatchStatus.beendet => ScfColors.outline,
+      MatchStatus.geplant => ScfColors.cyan,
+      MatchStatus.beendet => ScfColors.textFaint,
     };
     final statusLabel = switch (match.status) {
       MatchStatus.laufend => 'Live',
       MatchStatus.geplant => 'Geplant',
       MatchStatus.beendet => 'Beendet',
     };
+    final score = team == null || match.events.isEmpty
+        ? null
+        : calculateTeamStats(match, team);
 
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
@@ -204,7 +208,7 @@ class _MatchTile extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '${team?.name ?? 'Team'} gegen ${match.opponentName}',
+                      '${team?.name ?? 'Wir'} gegen ${match.opponentName}',
                       style: const TextStyle(
                         fontWeight: FontWeight.w700,
                         fontSize: 15,
@@ -214,7 +218,8 @@ class _MatchTile extends ConsumerWidget {
                     Text(
                       '${AppFormatters.date(match.date)}  ·  '
                       '${match.isHome ? 'Heim' : 'Auswärts'}  ·  '
-                      '${match.halfLengthMin} min/Halbzeit  ·  $statusLabel',
+                      '${match.halfLengthMin} min/Halbzeit  ·  $statusLabel'
+                      '${score == null ? '' : '  ·  ${score.goalsFor}:${score.goalsAgainst}'}',
                       style: const TextStyle(
                         color: ScfColors.textSecondary,
                         fontSize: 12.5,
@@ -304,13 +309,22 @@ class _QuickActions extends StatelessWidget {
             label: const Text('Teams'),
           ),
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 8),
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: () =>
+                Navigator.of(context).pushNamed(AppRoutes.playerStats),
+            icon: const Icon(Icons.insights_outlined),
+            label: const Text('Statistiken'),
+          ),
+        ),
+        const SizedBox(width: 8),
         Expanded(
           child: OutlinedButton.icon(
             onPressed: () =>
                 Navigator.of(context).pushNamed(AppRoutes.teamEdit),
             icon: const Icon(Icons.person_add_outlined),
-            label: const Text('Team anlegen'),
+            label: const Text('Neu'),
           ),
         ),
       ],

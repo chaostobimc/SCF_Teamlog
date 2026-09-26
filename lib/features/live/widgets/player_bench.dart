@@ -38,14 +38,21 @@ class PlayerBench extends StatelessWidget {
                 selected: player.id == selectedPlayerId,
                 onTap: () => onPlayerTap(player.id),
               ),
-            const SizedBox(width: 8),
-            for (final player in goalkeepers)
-              _JerseyChip(
-                player: player,
-                team: team,
-                selected: player.id == selectedPlayerId,
-                onTap: () => onPlayerTap(player.id),
+            if (goalkeepers.isNotEmpty) ...[
+              Container(
+                width: 1,
+                height: 44,
+                margin: const EdgeInsets.symmetric(horizontal: 8),
+                color: ScfColors.outline,
               ),
+              for (final player in goalkeepers)
+                _JerseyChip(
+                  player: player,
+                  team: team,
+                  selected: player.id == selectedPlayerId,
+                  onTap: () => onPlayerTap(player.id),
+                ),
+            ],
           ],
         ),
       );
@@ -58,7 +65,7 @@ class PlayerBench extends StatelessWidget {
           const _SectionLabel('Feldspieler'),
           Wrap(
             spacing: 8,
-            runSpacing: 8,
+            runSpacing: 10,
             children: [
               for (final player in fieldPlayers)
                 _JerseyChip(
@@ -69,11 +76,11 @@ class PlayerBench extends StatelessWidget {
                 ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 16),
           const _SectionLabel('Torhüter'),
           Wrap(
             spacing: 8,
-            runSpacing: 8,
+            runSpacing: 10,
             children: [
               for (final player in goalkeepers)
                 _JerseyChip(
@@ -98,16 +105,8 @@ class _SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Text(
-        text.toUpperCase(),
-        style: const TextStyle(
-          color: ScfColors.textSecondary,
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 1.2,
-        ),
-      ),
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Text(text.toUpperCase(), style: ScfText.sectionLabel),
     );
   }
 }
@@ -128,52 +127,78 @@ class _JerseyChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isKeeper = player.position == PlayerPosition.torwart;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
-      child: SizedBox(
-        width: 62,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 52,
-              height: 52,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [team.primaryColor, team.primaryColor.withValues(alpha: 0.8)],
+    final borderColor = selected
+        ? ScfColors.accent
+        : (isKeeper ? ScfColors.cyan.withValues(alpha: 0.7) : ScfColors.outline);
+
+    return Tooltip(
+      message: player.fullName,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 130),
+            width: 60,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 50,
+                  height: 50,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        team.primaryColor,
+                        Color.lerp(team.primaryColor, Colors.black, 0.22)!,
+                      ],
+                    ),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: borderColor,
+                      width: selected ? 2.5 : 1.4,
+                    ),
+                    boxShadow: selected
+                        ? [
+                            BoxShadow(
+                              color: ScfColors.accent.withValues(alpha: 0.45),
+                              blurRadius: 10,
+                              offset: const Offset(0, 3),
+                            ),
+                          ]
+                        : null,
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    '${player.number}',
+                    style: TextStyle(
+                      color: _contrastColor(team.primaryColor),
+                      fontSize: 19,
+                      fontWeight: FontWeight.w900,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
+                  ),
                 ),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: selected
-                      ? ScfColors.accent
-                      : (isKeeper ? ScfColors.info : ScfColors.outline),
-                  width: selected ? 3 : 1.5,
+                const SizedBox(height: 4),
+                Text(
+                  player.shortName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: selected
+                        ? ScfColors.textPrimary
+                        : ScfColors.textFaint,
+                    fontSize: 10,
+                    fontWeight:
+                        selected ? FontWeight.w700 : FontWeight.w500,
+                  ),
                 ),
-                boxShadow: selected
-                    ? [BoxShadow(color: ScfColors.accent.withValues(alpha: 0.4), blurRadius: 8)]
-                    : null,
-              ),
-              alignment: Alignment.center,
-              child: Text(
-                '${player.number}',
-                style: TextStyle(
-                  color: _contrastColor(team.primaryColor),
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
+              ],
             ),
-            const SizedBox(height: 4),
-            Text(
-              player.shortName,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: ScfColors.textSecondary, fontSize: 10.5),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -181,6 +206,6 @@ class _JerseyChip extends StatelessWidget {
 
   Color _contrastColor(Color background) {
     final luminance = background.computeLuminance();
-    return luminance > 0.45 ? ScfColors.surface : ScfColors.textPrimary;
+    return luminance > 0.5 ? ScfColors.background : ScfColors.textPrimary;
   }
 }
