@@ -260,6 +260,7 @@ class _PlayerHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final player = this.player;
     if (player == null) {
       return Container(
         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
@@ -284,7 +285,7 @@ class _PlayerHeader extends StatelessWidget {
       child: Row(
         children: [
           Text(
-            '#${player!.number}',
+            '#${player.number}',
             style: const TextStyle(
               fontWeight: FontWeight.w800,
               fontSize: 16,

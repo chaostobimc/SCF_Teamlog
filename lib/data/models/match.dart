@@ -109,7 +109,7 @@ class Match {
   }
 
   factory Match.fromMap(Map<dynamic, dynamic> map) {
-    final eventMaps = (map['events'] as List?) ?? const [];
+    final eventMaps = (map['events'] as List?) ?? const <dynamic>[];
     return Match(
       id: map['id'] as String,
       ownTeamId: map['ownTeamId'] as String,
@@ -122,7 +122,9 @@ class Match {
       firstHalfSec: (map['firstHalfSec'] as int?) ?? 0,
       secondHalfSec: (map['secondHalfSec'] as int?) ?? 0,
       pauseSec: (map['pauseSec'] as int?) ?? 0,
-      events: eventMaps.map(MatchEvent.fromMap).toList(),
+      events: eventMaps
+          .map((e) => MatchEvent.fromMap(e as Map<dynamic, dynamic>))
+          .toList(),
     );
   }
 

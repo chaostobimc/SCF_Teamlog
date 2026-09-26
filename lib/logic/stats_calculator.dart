@@ -1,6 +1,7 @@
 import '../data/models/match.dart';
 import '../data/models/match_event.dart';
 import '../data/models/player.dart';
+import '../data/models/team.dart';
 
 /// Zaehlung je Tor-Zone fuer die Treffer-Visualisierung.
 class ZoneTally {

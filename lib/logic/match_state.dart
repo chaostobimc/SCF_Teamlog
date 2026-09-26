@@ -21,7 +21,7 @@ class MatchState {
   const MatchState({
     required this.match,
     required this.team,
-    required this.running,
+    this.running = false,
     this.selectedPlayerId,
     this.pendingShot,
     this.lastCourtZone,

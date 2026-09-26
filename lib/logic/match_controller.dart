@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/models/match.dart';
 import '../data/models/match_event.dart';
+import '../data/models/player.dart';
 import '../data/models/team.dart';
 import '../data/repositories/match_repository.dart';
 import '../core/utils/id_generator.dart';

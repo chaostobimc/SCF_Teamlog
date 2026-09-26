@@ -53,11 +53,13 @@ class Team {
   }
 
   factory Team.fromMap(Map<dynamic, dynamic> map) {
-    final playerMaps = (map['players'] as List?) ?? const [];
+    final playerMaps = (map['players'] as List?) ?? const <dynamic>[];
     return Team(
       id: map['id'] as String,
       name: map['name'] as String,
-      players: playerMaps.map(Player.fromMap).toList(),
+      players: playerMaps
+          .map((p) => Player.fromMap(p as Map<dynamic, dynamic>))
+          .toList(),
       primaryColor: Color((map['primaryColor'] as int?) ?? 0xFFFF7A2F),
       secondaryColor: Color((map['secondaryColor'] as int?) ?? 0xFF12161C),
     );

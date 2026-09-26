@@ -27,8 +27,10 @@ class HandballCourt extends StatelessWidget {
     return AspectRatio(
       aspectRatio: aspectRatio,
       child: GestureDetector(
-        onTapUp:
-            enabled ? (details) => _handleTap(details.localPosition, onZoneTap) : null,
+        onTapUp: enabled
+            ? (details) =>
+                _handleTap(context, details.localPosition, onZoneTap)
+            : null,
         child: CustomPaint(
           painter: _CourtPainter(selectedZone: selectedZone, events: events),
         ),
@@ -36,7 +38,7 @@ class HandballCourt extends StatelessWidget {
     );
   }
 
-  void _handleTap(Offset local, ValueChanged<CourtZone> tap) {
+  void _handleTap(BuildContext context, Offset local, ValueChanged<CourtZone> tap) {
     final box = context.findRenderObject()! as RenderBox;
     final zone = zoneAt(local, box.size);
     if (zone != null) tap(zone);
