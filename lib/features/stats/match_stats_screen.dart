@@ -1,9 +1,10 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:cross_file/cross_file.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/theme/app_theme.dart';
@@ -405,11 +406,27 @@ class _ExportMenu extends StatelessWidget {
 
   static final _exportService = ExportService();
 
-  Future<void> _share(
+  Future<void> _deliver(
       BuildContext context, String name, Uint8List bytes, String mime) async {
     try {
-      final file = XFile.fromData(bytes, name: name, mimeType: mime);
-      await Share.shareXFiles([file], subject: name);
+      if (Platform.isAndroid) {
+        await Share.shareXFiles(
+          [XFile.fromData(bytes, mimeType: mime)],
+          fileNameOverrides: [name],
+        );
+        return;
+      }
+      // Windows und Linux: Exporte im Dokumente-Ordner ablegen.
+      final docs = await getApplicationDocumentsDirectory();
+      final folder = Directory('${docs.path}${Platform.pathSeparator}SCF_Teamlog');
+      await folder.create(recursive: true);
+      final file = File('${folder.path}${Platform.pathSeparator}$name');
+      await file.writeAsBytes(bytes);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gespeichert: ${file.path}')),
+        );
+      }
     } catch (error) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -435,12 +452,12 @@ class _ExportMenu extends StatelessWidget {
         switch (value) {
           case 'csv_events':
             final csv = _exportService.matchEventsCsv(match, team);
-            await _share(context, '${_baseName()}_ereignisse.csv',
+            await _deliver(context, '${_baseName()}_ereignisse.csv',
                 Uint8List.fromList(utf8.encode(csv)), 'text/csv');
             break;
           case 'csv_players':
             final csv = _exportService.playerStatsCsv(match, team);
-            await _share(context, '${_baseName()}_spieler.csv',
+            await _deliver(context, '${_baseName()}_spieler.csv',
                 Uint8List.fromList(utf8.encode(csv)), 'text/csv');
             break;
           case 'pdf':
@@ -448,7 +465,7 @@ class _ExportMenu extends StatelessWidget {
               const SnackBar(content: Text('PDF wird erstellt ...')),
             );
             final bytes = await _exportService.matchPdf(match, team);
-            await _share(context, '${_baseName()}.pdf', bytes, 'application/pdf');
+            await _deliver(context, '${_baseName()}.pdf', bytes, 'application/pdf');
             break;
         }
       },

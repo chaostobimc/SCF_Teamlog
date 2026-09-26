@@ -30,4 +30,3 @@ linux/flutter/ephemeral/
 
 # Hive-Daten liegen im Anwendungsverzeichnis, nicht im Repo
 *.hive
-*.lock

@@ -43,7 +43,9 @@ flutter build linux        # Linux (unter Linux)
   - Undo für die letzte Aktion.
 - **Auswertung**: Wurfquote, Paradenquote, Ballverluste, Zeitstrafen,
   Trefferzonen-Heatmap, Spielertabelle – live während und nach dem Spiel.
-- **Export**: CSV (Ereignisse, Spielertabelle) und PDF-Bericht.
+- **Export**: CSV (Ereignisse, Spielertabelle) und PDF-Bericht – auf Android
+  über den System-Dialog, unter Windows/Linux als Datei im Ordner
+  `Dokumente/SCF_Teamlog`.
 - **Offline-First**: alle Daten lokal in Hive, keine Internetverbindung nötig.
 
 ## Projektstruktur
