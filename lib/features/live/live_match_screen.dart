@@ -124,7 +124,7 @@ class _LiveMatchScreenState extends ConsumerState<LiveMatchScreen> {
     }
   }
 
-  bool _handleKey(FocusKeyEvent event) {
+  bool _handleKey(KeyEvent event) {
     if (event is! KeyDownEvent) return false;
     final state = ref.read(matchControllerProvider(widget.matchId));
 
