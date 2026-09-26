@@ -1,0 +1,51 @@
+import 'package:flutter/material.dart';
+
+import '../features/home/home_screen.dart';
+import '../features/live/live_match_screen.dart';
+import '../features/match_setup/match_setup_screen.dart';
+import '../features/stats/match_stats_screen.dart';
+import '../features/teams/team_edit_screen.dart';
+import '../features/teams/team_list_screen.dart';
+
+class AppRoutes {
+  static const home = '/';
+  static const teams = '/teams';
+  static const teamEdit = '/teams/edit';
+  static const matchSetup = '/match/new';
+  static const liveMatch = '/match/live';
+  static const matchStats = '/match/stats';
+}
+
+class AppRouter {
+  static Route<dynamic> onGenerateRoute(RouteSettings settings) {
+    switch (settings.name) {
+      case AppRoutes.home:
+        return _fade(const HomeScreen(), settings);
+      case AppRoutes.teams:
+        return _fade(const TeamListScreen(), settings);
+      case AppRoutes.teamEdit:
+        final args = settings.arguments as TeamEditArgs?;
+        return _fade(TeamEditScreen(existing: args?.team), settings);
+      case AppRoutes.matchSetup:
+        return _fade(const MatchSetupScreen(), settings);
+      case AppRoutes.liveMatch:
+        final matchId = settings.arguments as String;
+        return _fade(LiveMatchScreen(matchId: matchId), settings);
+      case AppRoutes.matchStats:
+        final matchId = settings.arguments as String;
+        return _fade(MatchStatsScreen(matchId: matchId), settings);
+      default:
+        return _fade(const HomeScreen(), settings);
+    }
+  }
+
+  static PageRouteBuilder _fade(Widget page, RouteSettings settings) {
+    return PageRouteBuilder(
+      settings: settings,
+      transitionDuration: const Duration(milliseconds: 180),
+      pageBuilder: (_, __, ___) => page,
+      transitionsBuilder: (_, animation, __, child) =>
+          FadeTransition(opacity: animation, child: child),
+    );
+  }
+}
