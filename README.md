@@ -18,6 +18,13 @@ flutter pub get
 flutter run -d linux      # oder -d windows / -d android
 ```
 
+> **Hinweis:** Ohne diesen Schritt meldet Flutter
+> „No Windows desktop project configured" (bzw. entsprechend für die
+> anderen Plattformen) – die Plattformordner werden erst von
+> `flutter create` erzeugt. Der Parameter `--project-name scf_teamlog`
+> muss exakt so bleiben. Falls dabei `test/widget_test.dart` neu
+> angelegt wird: vor `flutter test` wieder löschen.
+
 Zum Bauen:
 
 ```bash
