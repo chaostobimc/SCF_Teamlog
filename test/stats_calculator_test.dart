@@ -10,6 +10,8 @@ MatchEvent _event({
   required MatchEventType type,
   int clock = 0,
   bool sevenMeter = false,
+  bool isOpponent = false,
+  int? opponentNumber,
   GoalZone? goalZone,
   CourtZone? courtZone,
 }) {
@@ -20,6 +22,8 @@ MatchEvent _event({
     matchClockSec: clock,
     phase: MatchPhase.ersteHalbzeit,
     isSevenMeter: sevenMeter,
+    isOpponent: isOpponent,
+    opponentNumber: opponentNumber,
     goalZone: goalZone,
     courtZone: courtZone,
     createdAt: DateTime(2026, 9, 26),
@@ -143,5 +147,39 @@ void main() {
     expect(total.goals, 2);
     expect(stats.goalsFor, 2);
     expect(stats.goalsAgainst, 0);
+  });
+
+  test('Gegner-Werfer werden je Trikotnummer gruppiert', () {
+    final match = matchWith([
+      _event(playerId: 'b', type: MatchEventType.gegentor, clock: 10,
+          isOpponent: true, opponentNumber: 7, goalZone: GoalZone.obenLinks),
+      _event(playerId: 'b', type: MatchEventType.parade, clock: 40,
+          isOpponent: true, opponentNumber: 7, goalZone: GoalZone.untenLinks),
+      _event(playerId: 'b', type: MatchEventType.gegentorSiebenMeter,
+          clock: 90, isOpponent: true, opponentNumber: 9, sevenMeter: true,
+          goalZone: GoalZone.untenMitte),
+      _event(playerId: 'b', type: MatchEventType.fehlwurf, clock: 120,
+          isOpponent: true, opponentNumber: 9, goalZone: GoalZone.drueber),
+      _event(playerId: 'b', type: MatchEventType.parade, clock: 150,
+          isOpponent: true, goalZone: GoalZone.obenRechts),
+    ]);
+
+    final shooters = opponentShooters(match);
+    expect(shooters.keys, containsAll(<int>[0, 7, 9]));
+
+    final seven = shooters[7]!;
+    expect(seven.shots, 2);
+    expect(seven.onTarget, 2);
+    expect(seven.conceded, 1);
+    expect(seven.saves, 1);
+
+    final nine = shooters[9]!;
+    expect(nine.shots, 2);
+    expect(nine.onTarget, 1);
+    expect(nine.misses, 1);
+
+    final unknown = shooters[0]!;
+    expect(unknown.shots, 1);
+    expect(unknown.saves, 1);
   });
 }

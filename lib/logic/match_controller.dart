@@ -263,6 +263,15 @@ class MatchController extends StateNotifier<MatchState> {
     onCourtZoneTap(context);
   }
 
+  /// Trikotnummer des Gegners fuer das Wurfbild setzen (null = ohne Nummer).
+  void setOpponentNumber(int? number) {
+    if (number == null) {
+      state = state.copyWith(clearOpponentNumber: true);
+      return;
+    }
+    state = state.copyWith(opponentNumber: number);
+  }
+
   /// Kontextwechsel 7m / Freiwurf / Feldwurf im Aktionspanel.
   void setThrowContext({bool? sevenMeter, bool? freeThrow}) {
     final pending = state.pendingShot;
@@ -417,6 +426,58 @@ class MatchController extends StateNotifier<MatchState> {
     );
   }
 
+  /// Spielzeit anpassen (Delta in Sekunden, auf die aktuelle Phase bezogen).
+  void adjustClock(int deltaSeconds) {
+    final match = state.match;
+    int clamp(int value) => value < 0 ? 0 : value;
+    Match updated;
+    switch (match.phase) {
+      case MatchPhase.ersteHalbzeit:
+        updated = match.copyWith(firstHalfSec: clamp(match.firstHalfSec + deltaSeconds));
+        break;
+      case MatchPhase.zweiteHalbzeit:
+        updated =
+            match.copyWith(secondHalfSec: clamp(match.secondHalfSec + deltaSeconds));
+        break;
+      default:
+        updated = match.copyWith(pauseSec: clamp(match.pauseSec + deltaSeconds));
+        break;
+    }
+    final saved = _commit(updated, keepClockRunning: state.running);
+    state = state.copyWith(match: saved);
+  }
+
+  /// Spielzeit der aktuellen Phase exakt setzen (Sekunden).
+  void setPeriodClock(int seconds) {
+    final match = state.match;
+    final value = seconds < 0 ? 0 : seconds;
+    Match updated;
+    switch (match.phase) {
+      case MatchPhase.ersteHalbzeit:
+        updated = match.copyWith(firstHalfSec: value);
+        break;
+      case MatchPhase.zweiteHalbzeit:
+        updated = match.copyWith(secondHalfSec: value);
+        break;
+      default:
+        updated = match.copyWith(pauseSec: value);
+        break;
+    }
+    final saved = _commit(updated, keepClockRunning: state.running);
+    state = state.copyWith(match: saved);
+  }
+
+  /// Spieler des Aufgebots fuer die Leiste (leeres Aufgebot = alle).
+  List<Player> squadPlayers() {
+    final team = state.team;
+    final match = state.match;
+    if (team == null) return const [];
+    if (match.squadPlayerIds.isEmpty) return team.players;
+    return team.players
+        .where((p) => match.squadPlayerIds.contains(p.id))
+        .toList();
+  }
+
   // --------------------------------------------------------------- intern
 
   Player? _selectedPlayer() {
@@ -440,6 +501,7 @@ class MatchController extends StateNotifier<MatchState> {
     bool isSevenMeter = false,
     bool isFreeThrow = false,
     bool isOpponent = false,
+    int? opponentNumber,
   }) {
     final match = state.match;
     final event = MatchEvent(
@@ -450,6 +512,8 @@ class MatchController extends StateNotifier<MatchState> {
       phase: match.phase,
       isSevenMeter: isSevenMeter,
       isOpponent: isOpponent,
+      opponentNumber:
+          isOpponent ? (opponentNumber ?? state.opponentNumber) : null,
       goalZone: goalZone,
       courtZone: courtZone,
       createdAt: DateTime.now(),

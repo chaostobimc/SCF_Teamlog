@@ -35,12 +35,13 @@ class _MatchStatsScreenState extends ConsumerState<MatchStatsScreen>
   late final TabController _tabController;
   final GlobalKey _overviewKey = GlobalKey();
   final GlobalKey _shotmapKey = GlobalKey();
+  final GlobalKey _opponentKey = GlobalKey();
   final GlobalKey _tableKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
   }
 
   @override
@@ -95,6 +96,7 @@ class _MatchStatsScreenState extends ConsumerState<MatchStatsScreen>
               tabs: const [
                 Tab(icon: Icon(Icons.dashboard_outlined), text: 'Übersicht'),
                 Tab(icon: Icon(Icons.gps_fixed), text: 'Wurfbild'),
+                Tab(icon: Icon(Icons.numbers), text: 'Gegner'),
                 Tab(icon: Icon(Icons.table_rows_outlined), text: 'Tabelle'),
               ],
             ),
@@ -122,6 +124,16 @@ class _MatchStatsScreenState extends ConsumerState<MatchStatsScreen>
                       color: ScfColors.background,
                       child: _ShotmapTab(
                           match: match, team: team, shotMap: shotMap),
+                    ),
+                  ),
+                ),
+                SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: RepaintBoundary(
+                    key: _opponentKey,
+                    child: ColoredBox(
+                      color: ScfColors.background,
+                      child: _OpponentTab(match: match),
                     ),
                   ),
                 ),
@@ -515,6 +527,164 @@ class _KeeperRow extends StatelessWidget {
 }
 
 // ----------------------------------------------------------------- Tabelle
+
+// ---------------------------------------------------------------- Gegner
+
+class _OpponentTab extends StatelessWidget {
+  const _OpponentTab({required this.match});
+
+  final Match match;
+
+  @override
+  Widget build(BuildContext context) {
+    final shooters = opponentShooters(match);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Gegnerische Werfer',
+                    style:
+                        TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+                const SizedBox(height: 4),
+                const Text(
+                  'Würfe je erfasster Trikotnummer – für genaue Wurfbilder '
+                  'und Scouting.',
+                  style:
+                      TextStyle(color: ScfColors.textSecondary, fontSize: 12),
+                ),
+                const SizedBox(height: 12),
+                if (shooters.isEmpty)
+                  const Text('Noch keine Gegnerwürfe erfasst',
+                      style: TextStyle(color: ScfColors.textFaint))
+                else
+                  _OpponentShooterTable(shooters: shooters),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _OpponentShooterTable extends StatelessWidget {
+  const _OpponentShooterTable({required this.shooters});
+
+  final Map<int, OpponentShooterStats> shooters;
+
+  @override
+  Widget build(BuildContext context) {
+    final keys = shooters.keys.toList()..sort();
+
+    return Column(
+      children: [
+        const _OpponentRow(
+          number: null,
+          shots: 'Würfe',
+          onTarget: 'aufs Tor',
+          goals: 'Tore',
+          saves: 'gehalten',
+          efficiency: 'Quote',
+          header: true,
+        ),
+        for (final key in keys)
+          _OpponentRow(
+            number: key,
+            shots: '${shooters[key]!.shots}',
+            onTarget: '${shooters[key]!.onTarget}',
+            goals: '${shooters[key]!.conceded}',
+            saves: '${shooters[key]!.saves}',
+            efficiency: AppFormatters.percent(shooters[key]!.efficiency),
+          ),
+      ],
+    );
+  }
+}
+
+class _OpponentRow extends StatelessWidget {
+  const _OpponentRow({
+    required this.number,
+    required this.shots,
+    required this.onTarget,
+    required this.goals,
+    required this.saves,
+    required this.efficiency,
+    this.header = false,
+  });
+
+  final int? number;
+  final String shots;
+  final String onTarget;
+  final String goals;
+  final String saves;
+  final String efficiency;
+  final bool header;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = header
+        ? const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.6,
+            color: ScfColors.textSecondary,
+          )
+        : const TextStyle(
+            fontSize: 13,
+            color: ScfColors.textPrimary,
+            fontFeatures: [FontFeature.tabularFigures()],
+          );
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 7),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+            color: header ? ScfColors.outline : ScfColors.outlineSoft,
+          ),
+        ),
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 56,
+            child: number == null
+                ? Text('Nr.', style: style)
+                : Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: number == 0
+                          ? ScfColors.surfaceRaised
+                          : ScfColors.cyanSoft,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      number == 0 ? '–' : '$number',
+                      style: style.copyWith(
+                        fontWeight: FontWeight.w800,
+                        color:
+                            number == 0 ? ScfColors.textSecondary : ScfColors.cyan,
+                      ),
+                    ),
+                  ),
+          ),
+          Expanded(child: Text(shots, style: style)),
+          Expanded(child: Text(onTarget, style: style)),
+          Expanded(child: Text(goals, style: style)),
+          Expanded(child: Text(saves, style: style)),
+          Expanded(child: Text(efficiency, style: style)),
+        ],
+      ),
+    );
+  }
+}
 
 class _PlayerTable extends StatelessWidget {
   const _PlayerTable({required this.match, required this.team});

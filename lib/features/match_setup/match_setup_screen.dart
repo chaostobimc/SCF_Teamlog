@@ -2,14 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_theme.dart';
-import '../../core/utils/app_formatters.dart';
 import '../../core/utils/id_generator.dart';
+import '../../data/database/seed.dart';
 import '../../data/models/match.dart';
-import '../../data/models/team.dart';
+import '../../data/models/player.dart';
 import '../../logic/providers.dart';
 import '../../routing/app_router.dart';
 
-/// Neues Spiel anlegen: Team, Gegner, Datum, Heim/Auswärts, Halbzeitlänge.
+/// Neues Spiel: Gegner, Rahmen, Spielzeit und Aufgebot – ohne Team-Auswahl,
+/// denn die App ist fest auf SC Freising ausgelegt.
 class MatchSetupScreen extends ConsumerStatefulWidget {
   const MatchSetupScreen({super.key});
 
@@ -18,16 +19,222 @@ class MatchSetupScreen extends ConsumerStatefulWidget {
 }
 
 class _MatchSetupScreenState extends ConsumerState<MatchSetupScreen> {
-  final TextEditingController _opponentController = TextEditingController();
-  Team? _team;
-  DateTime _date = DateTime.now();
+  final _opponentController = TextEditingController();
   bool _isHome = true;
   int _halfLengthMin = 30;
+  DateTime _date = DateTime.now();
+  bool _preselected = false;
+  final Set<String> _squad = <String>{};
 
   @override
   void dispose() {
     _opponentController.dispose();
     super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final teamsAsync = ref.watch(teamsProvider);
+    final team = ref.watch(scfTeamProvider);
+
+    return Scaffold(
+      appBar: AppBar(title: const Text('Spiel anlegen')),
+      body: teamsAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (error, stackTrace) => Center(child: Text('Fehler: $error')),
+        data: (_) {
+          final players = [...team.players]
+            ..sort((a, b) => a.number.compareTo(b.number));
+          if (!_preselected && players.isNotEmpty) {
+            _preselected = true;
+            _squad.addAll(players.map((p) => p.id));
+          }
+          final goalkeepers = players
+              .where((p) => p.position == PlayerPosition.torwart)
+              .toList();
+          final fieldPlayers = players
+              .where((p) => p.position == PlayerPosition.feldspieler)
+              .toList();
+
+          return Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 680),
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  const Text('GEGNER & RAHMEN', style: ScfText.sectionLabel),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _opponentController,
+                    textCapitalization: TextCapitalization.words,
+                    decoration: const InputDecoration(
+                      labelText: 'Gegner',
+                      hintText: 'z. B. TSV Ottobrunn',
+                      prefixIcon: Icon(Icons.shield_outlined),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: _pickDate,
+                          icon: const Icon(Icons.event_outlined, size: 18),
+                          label: Text(_dateLabel()),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: SegmentedButton<bool>(
+                          segments: const [
+                            ButtonSegment(
+                              value: true,
+                              label: Text('Heim'),
+                              icon: Icon(Icons.home_outlined),
+                            ),
+                            ButtonSegment(
+                              value: false,
+                              label: Text('Auswärts'),
+                              icon: Icon(Icons.directions_bus_outlined),
+                            ),
+                          ],
+                          selected: {_isHome},
+                          onSelectionChanged: (selection) =>
+                              setState(() => _isHome = selection.first),
+                          showSelectedIcon: false,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  const Text('SPIELZEIT', style: ScfText.sectionLabel),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Halbzeitlänge – die Uhr läuft erst im Live-Spiel '
+                    'und ist dort jederzeit anpassbar.',
+                    style: ScfText.caption,
+                  ),
+                  const SizedBox(height: 10),
+                  SegmentedButton<int>(
+                    segments: const [
+                      ButtonSegment(value: 20, label: Text('20 min')),
+                      ButtonSegment(value: 25, label: Text('25 min')),
+                      ButtonSegment(value: 30, label: Text('30 min')),
+                      ButtonSegment(value: 35, label: Text('35 min')),
+                    ],
+                    selected: {_halfLengthMin},
+                    onSelectionChanged: (selection) =>
+                        setState(() => _halfLengthMin = selection.first),
+                    showSelectedIcon: false,
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    'AUFGEBOT · ${_squad.length}/${players.length}',
+                    style: ScfText.sectionLabel,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Nur ausgewählte Spieler erscheinen im Live-Spiel.',
+                    style: ScfText.caption,
+                  ),
+                  const SizedBox(height: 10),
+                  if (players.isEmpty)
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          children: [
+                            const Text(
+                              'Noch keine Spieler im Kader.',
+                              style: TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                            const SizedBox(height: 12),
+                            FilledButton.icon(
+                              onPressed: () =>
+                                  Navigator.of(context)
+                                      .pushNamed(AppRoutes.squad),
+                              icon: const Icon(Icons.people_outline),
+                              label: const Text('Kader öffnen'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  else ...[
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: goalkeepers.isEmpty
+                                ? null
+                                : () => _toggleGroup(goalkeepers),
+                            icon: Icon(
+                              _allSelected(goalkeepers)
+                                  ? Icons.check_box
+                                  : Icons.check_box_outline_blank,
+                              size: 18,
+                            ),
+                            label: Text('Torwart (${goalkeepers.length})'),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: fieldPlayers.isEmpty
+                                ? null
+                                : () => _toggleGroup(fieldPlayers),
+                            icon: Icon(
+                              _allSelected(fieldPlayers)
+                                  ? Icons.check_box
+                                  : Icons.check_box_outline_blank,
+                              size: 18,
+                            ),
+                            label: Text('Feld (${fieldPlayers.length})'),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    _SquadGroup(
+                      label: 'TOR',
+                      players: goalkeepers,
+                      selected: _squad,
+                      onToggle: _toggle,
+                    ),
+                    const SizedBox(height: 10),
+                    _SquadGroup(
+                      label: 'FELD',
+                      players: fieldPlayers,
+                      selected: _squad,
+                      onToggle: _toggle,
+                    ),
+                  ],
+                  const SizedBox(height: 24),
+                  FilledButton.icon(
+                    onPressed: _squad.isEmpty ? null : _startMatch,
+                    icon: const Icon(Icons.play_arrow),
+                    label: const Text('Spiel starten'),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 18),
+                      textStyle: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  String _dateLabel() {
+    return '${_date.day.toString().padLeft(2, '0')}.'
+        '${_date.month.toString().padLeft(2, '0')}.${_date.year}';
   }
 
   Future<void> _pickDate() async {
@@ -40,216 +247,140 @@ class _MatchSetupScreenState extends ConsumerState<MatchSetupScreen> {
     if (picked != null) setState(() => _date = picked);
   }
 
+  bool _allSelected(List<Player> group) =>
+      group.isNotEmpty && group.every((p) => _squad.contains(p.id));
+
+  void _toggleGroup(List<Player> group) {
+    setState(() {
+      if (_allSelected(group)) {
+        _squad.removeWhere((id) => group.any((p) => p.id == id));
+      } else {
+        _squad.addAll(group.map((p) => p.id));
+      }
+    });
+  }
+
+  void _toggle(Player player) {
+    setState(() {
+      if (!_squad.remove(player.id)) {
+        _squad.add(player.id);
+      }
+    });
+  }
+
   Future<void> _startMatch() async {
     final opponent = _opponentController.text.trim();
-    final team = _team;
-    if (team == null) {
-      _hint('Bitte ein Team auswählen.');
-      return;
-    }
     if (opponent.isEmpty) {
-      _hint('Bitte einen Gegner eingeben.');
-      return;
-    }
-    if (team.fieldPlayers.isEmpty) {
-      _hint('Das Team braucht mindestens einen Feldspieler.');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Bitte einen Gegner eingeben.')),
+      );
       return;
     }
 
     final match = Match(
       id: newId(),
-      ownTeamId: team.id,
+      ownTeamId: scfTeamId,
       opponentName: opponent,
       date: _date,
       isHome: _isHome,
       halfLengthMin: _halfLengthMin,
       status: MatchStatus.geplant,
       phase: MatchPhase.ersteHalbzeit,
+      squadPlayerIds: _squad.toList(),
     );
     await ref.read(matchRepositoryProvider).save(match);
+
     if (!mounted) return;
     Navigator.of(context).pushReplacementNamed(
       AppRoutes.liveMatch,
       arguments: match.id,
     );
   }
+}
 
-  void _hint(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
-  }
+class _SquadGroup extends StatelessWidget {
+  const _SquadGroup({
+    required this.label,
+    required this.players,
+    required this.selected,
+    required this.onToggle,
+  });
+
+  final String label;
+  final List<Player> players;
+  final Set<String> selected;
+  final ValueChanged<Player> onToggle;
 
   @override
   Widget build(BuildContext context) {
-    final teams = ref.watch(teamsProvider).valueOrNull ?? const <Team>[];
-
-    return Scaffold(
-      appBar: AppBar(title: const Text('Neues Spiel')),
-      body: teams.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    'Zuerst ein Team anlegen.',
-                    style: TextStyle(color: ScfColors.textSecondary, fontSize: 15),
-                  ),
-                  const SizedBox(height: 12),
-                  FilledButton.icon(
-                    onPressed: () =>
-                        Navigator.of(context).pushReplacementNamed(AppRoutes.teams),
-                    icon: const Icon(Icons.add),
-                    label: const Text('Team anlegen'),
-                  ),
-                ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(label, style: ScfText.sectionLabel),
+        const SizedBox(height: 6),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final player in players)
+              _SquadChip(
+                player: player,
+                selected: selected.contains(player.id),
+                onTap: () => onToggle(player),
               ),
-            )
-          : Align(
-              alignment: Alignment.topCenter,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 560),
-                child: ListView(
-                  padding: const EdgeInsets.all(20),
-                  children: [
-                    DropdownButtonFormField<Team>(
-                      initialValue: _team ?? (teams.length == 1 ? teams.first : null),
-                      decoration: const InputDecoration(labelText: 'Eigenes Team'),
-                      items: [
-                        for (final team in teams)
-                          DropdownMenuItem(value: team, child: Text(team.name)),
-                      ],
-                      onChanged: (value) => setState(() => _team = value),
-                    ),
-                    const SizedBox(height: 14),
-                    TextField(
-                      controller: _opponentController,
-                      decoration: const InputDecoration(labelText: 'Gegner'),
-                    ),
-                    const SizedBox(height: 14),
-                    Card(
-                      child: ListTile(
-                        leading: const Icon(Icons.calendar_today_outlined,
-                            color: ScfColors.textSecondary),
-                        title: const Text('Datum'),
-                        subtitle: Text(AppFormatters.date(_date)),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: _pickDate,
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _SelectCard(
-                            label: 'Heimspiel',
-                            icon: Icons.home_outlined,
-                            selected: _isHome,
-                            onTap: () => setState(() => _isHome = true),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: _SelectCard(
-                            label: 'Auswärts',
-                            icon: Icons.flight_outlined,
-                            selected: !_isHome,
-                            onTap: () => setState(() => _isHome = false),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 18),
-                    const Text(
-                      'Halbzeitlänge',
-                      style: TextStyle(color: ScfColors.textSecondary, fontSize: 13),
-                    ),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        for (final minutes in const [20, 25, 30, 35])
-                          Expanded(
-                            child: Padding(
-                              padding: const EdgeInsets.only(right: 8),
-                              child: _SelectCard(
-                                label: '$minutes min',
-                                icon: Icons.timer_outlined,
-                                selected: _halfLengthMin == minutes,
-                                onTap: () =>
-                                    setState(() => _halfLengthMin = minutes),
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-                    SizedBox(
-                      height: 52,
-                      child: FilledButton.icon(
-                        onPressed: _startMatch,
-                        icon: const Icon(Icons.play_arrow, size: 22),
-                        label: const Text(
-                          'Spiel starten',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+          ],
+        ),
+      ],
     );
   }
 }
 
-class _SelectCard extends StatelessWidget {
-  const _SelectCard({
-    required this.label,
-    required this.icon,
+class _SquadChip extends StatelessWidget {
+  const _SquadChip({
+    required this.player,
     required this.selected,
     required this.onTap,
   });
 
-  final String label;
-  final IconData icon;
+  final Player player;
   final bool selected;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: selected
-          ? ScfColors.accent.withValues(alpha: 0.22)
-          : ScfColors.surfaceRaised,
-      borderRadius: BorderRadius.circular(10),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
-        child: Container(
-          height: 56,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: selected ? ScfColors.accent : ScfColors.outline,
-              width: selected ? 1.4 : 1,
-            ),
+    final accent = player.position == PlayerPosition.torwart
+        ? ScfColors.cyan
+        : ScfColors.accent;
+
+    return FilterChip(
+      selected: selected,
+      showCheckmark: false,
+      onSelected: (_) => onTap(),
+      backgroundColor: ScfColors.surfaceRaised,
+      selectedColor: accent.withValues(alpha: 0.18),
+      side: BorderSide(
+        color: selected ? accent : ScfColors.outline,
+        width: selected ? 1.5 : 1,
+      ),
+      avatar: CircleAvatar(
+        backgroundColor: selected ? accent : ScfColors.outline,
+        child: Text(
+          '${player.number}',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w900,
+            color: selected ? Colors.black : ScfColors.textSecondary,
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon,
-                  size: 18,
-                  color: selected ? ScfColors.accent : ScfColors.textSecondary),
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: TextStyle(
-                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                  color: selected ? ScfColors.textPrimary : ScfColors.textSecondary,
-                ),
-              ),
-            ],
+        ),
+      ),
+      label: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 120),
+        child: Text(
+          player.fullName,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            fontWeight: FontWeight.w700,
+            fontSize: 12.5,
           ),
         ),
       ),

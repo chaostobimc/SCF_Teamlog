@@ -4,231 +4,220 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/app_formatters.dart';
 import '../../data/models/match.dart';
+import '../../data/models/match_event.dart';
 import '../../logic/providers.dart';
-import '../../logic/stats_calculator.dart';
 import '../../routing/app_router.dart';
 
-/// Startbildschirm: Spieluebersicht, Teams, neues Spiel.
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final matches = ref.watch(matchesProvider).valueOrNull ?? const [];
-    final teams = ref.watch(teamsProvider).valueOrNull ?? const [];
-
-    final running = matches.where((m) => m.status == MatchStatus.laufend).toList();
-    final planned = matches.where((m) => m.status == MatchStatus.geplant).toList();
-    final finished = matches.where((m) => m.status == MatchStatus.beendet).toList();
+    final matchesAsync = ref.watch(matchesProvider);
+    final team = ref.watch(scfTeamProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('SCF Teamlog'),
-        actions: [
-          IconButton(
-            tooltip: 'Teams verwalten',
-            onPressed: () =>
-                Navigator.of(context).pushNamed(AppRoutes.teams),
-            icon: const Icon(Icons.groups_outlined),
-          ),
-        ],
-      ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final wide = constraints.maxWidth >= 900;
-          final content = _MatchList(
-            running: running,
-            planned: planned,
-            finished: finished,
-            emptyHint: teams.isEmpty
-                ? 'Lege zuerst ein Team an.'
-                : 'Noch kein Spiel angelegt.',
-          );
-
-          return Padding(
-            padding: const EdgeInsets.all(16),
-            child: wide
-                ? Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(flex: 3, child: content),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        flex: 2,
-                        child: _Sidebar(
-                          teamCount: teams.length,
-                          matchCount: matches.length,
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 760),
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 46,
+                      height: 46,
+                      decoration: BoxDecoration(
+                        color: ScfColors.accent,
+                        borderRadius: BorderRadius.circular(13),
+                      ),
+                      alignment: Alignment.center,
+                      child: const Text(
+                        'SC',
+                        style: TextStyle(
+                          color: Colors.black,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 17,
                         ),
                       ),
-                    ],
-                  )
-                : Column(
-                    children: [
-                      Expanded(child: content),
-                      const SizedBox(height: 12),
-                      _QuickActions(teamCount: teams.length),
-                    ],
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'SCF Teamlog',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w900,
+                              fontSize: 21,
+                              letterSpacing: -0.3,
+                            ),
+                          ),
+                          Text(
+                            'SC Freising · Handball Live-Statistik',
+                            style: ScfText.caption,
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Kader verwalten',
+                      onPressed: () => Navigator.of(context)
+                          .pushNamed(AppRoutes.squad),
+                      icon: const Icon(Icons.groups_outlined),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                _QuickActions(teamPlayerCount: team.players.length),
+                const SizedBox(height: 22),
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'SPIELVERLAUF',
+                        style: ScfText.sectionLabel,
+                      ),
+                    ),
+                    matchesAsync.maybeWhen(
+                      data: (matches) => Text(
+                        '${matches.length} Spiele',
+                        style: ScfText.caption.copyWith(fontSize: 11),
+                      ),
+                      orElse: () => const SizedBox.shrink(),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                matchesAsync.when(
+                  loading: () => const Padding(
+                    padding: EdgeInsets.all(32),
+                    child: Center(child: CircularProgressIndicator()),
                   ),
-          );
-        },
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.of(context).pushNamed(AppRoutes.matchSetup),
-        icon: const Icon(Icons.add),
-        label: const Text('Neues Spiel'),
+                  error: (error, stackTrace) => Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Text('Fehler beim Laden: $error'),
+                    ),
+                  ),
+                  data: (matches) => matches.isEmpty
+                      ? const _EmptyHistory()
+                      : Column(
+                          children: [
+                            for (final match in matches)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: _MatchRow(match: match),
+                              ),
+                          ],
+                        ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
 }
 
-class _MatchList extends StatelessWidget {
-  const _MatchList({
-    required this.running,
-    required this.planned,
-    required this.finished,
-    required this.emptyHint,
-  });
+class _QuickActions extends StatelessWidget {
+  const _QuickActions({required this.teamPlayerCount});
 
-  final List<Match> running;
-  final List<Match> planned;
-  final List<Match> finished;
-  final String emptyHint;
+  final int teamPlayerCount;
 
   @override
   Widget build(BuildContext context) {
-    if (running.isEmpty && planned.isEmpty && finished.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.sports_handball,
-                size: 64, color: ScfColors.textSecondary.withValues(alpha: 0.5)),
-            const SizedBox(height: 12),
-            Text(emptyHint,
-                style: const TextStyle(color: ScfColors.textSecondary, fontSize: 15)),
-          ],
-        ),
-      );
-    }
-
-    return ListView(
+    return Row(
       children: [
-        if (running.isNotEmpty) ...[
-          const _SectionHeader('Laufend'),
-          for (final match in running) _MatchTile(match: match),
-          const SizedBox(height: 12),
-        ],
-        if (planned.isNotEmpty) ...[
-          const _SectionHeader('Geplant'),
-          for (final match in planned) _MatchTile(match: match),
-          const SizedBox(height: 12),
-        ],
-        if (finished.isNotEmpty) ...[
-          const _SectionHeader('Beendet'),
-          for (final match in finished) _MatchTile(match: match),
-        ],
+        Expanded(
+          flex: 3,
+          child: _ActionCard(
+            icon: Icons.play_arrow_rounded,
+            title: 'Spiel starten',
+            subtitle: 'Live erfassen',
+            color: ScfColors.accent,
+            onTap: () =>
+                Navigator.of(context).pushNamed(AppRoutes.matchSetup),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          flex: 2,
+          child: _ActionCard(
+            icon: Icons.people_outline,
+            title: 'Kader',
+            subtitle: '$teamPlayerCount Spieler',
+            color: ScfColors.cyan,
+            onTap: () => Navigator.of(context).pushNamed(AppRoutes.squad),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          flex: 2,
+          child: _ActionCard(
+            icon: Icons.leaderboard_outlined,
+            title: 'Statistik',
+            subtitle: 'Alle Zeiten',
+            color: ScfColors.violet,
+            onTap: () =>
+                Navigator.of(context).pushNamed(AppRoutes.playerStats),
+          ),
+        ),
       ],
     );
   }
 }
 
-class _SectionHeader extends StatelessWidget {
-  const _SectionHeader(this.text);
+class _ActionCard extends StatelessWidget {
+  const _ActionCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.color,
+    required this.onTap,
+  });
 
-  final String text;
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final Color color;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8, left: 2),
-      child: Text(
-        text.toUpperCase(),
-        style: const TextStyle(
-          color: ScfColors.textSecondary,
-          fontSize: 11.5,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 1.2,
-        ),
-      ),
-    );
-  }
-}
-
-class _MatchTile extends ConsumerWidget {
-  const _MatchTile({required this.match});
-
-  final Match match;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final team = ref.watch(teamByIdProvider(match.ownTeamId));
-    final statusColor = switch (match.status) {
-      MatchStatus.laufend => ScfColors.success,
-      MatchStatus.geplant => ScfColors.cyan,
-      MatchStatus.beendet => ScfColors.textFaint,
-    };
-    final statusLabel = switch (match.status) {
-      MatchStatus.laufend => 'Live',
-      MatchStatus.geplant => 'Geplant',
-      MatchStatus.beendet => 'Beendet',
-    };
-    final score = team == null || match.events.isEmpty
-        ? null
-        : calculateTeamStats(match, team);
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
+    return Material(
+      color: color.withValues(alpha: 0.10),
+      borderRadius: BorderRadius.circular(16),
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () {
-          switch (match.status) {
-            case MatchStatus.laufend:
-              Navigator.of(context)
-                  .pushNamed(AppRoutes.liveMatch, arguments: match.id);
-              break;
-            case MatchStatus.geplant:
-            case MatchStatus.beendet:
-              Navigator.of(context)
-                  .pushNamed(AppRoutes.matchStats, arguments: match.id);
-              break;
-          }
-        },
-        child: Padding(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
           padding: const EdgeInsets.all(14),
-          child: Row(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: color.withValues(alpha: 0.35)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 10,
-                height: 10,
-                decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${team?.name ?? 'Wir'} gegen ${match.opponentName}',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 15,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      '${AppFormatters.date(match.date)}  ·  '
-                      '${match.isHome ? 'Heim' : 'Auswärts'}  ·  '
-                      '${match.halfLengthMin} min/Halbzeit  ·  $statusLabel'
-                      '${score == null ? '' : '  ·  ${score.goalsFor}:${score.goalsAgainst}'}',
-                      style: const TextStyle(
-                        color: ScfColors.textSecondary,
-                        fontSize: 12.5,
-                      ),
-                    ),
-                  ],
+              Icon(icon, color: color, size: 26),
+              const SizedBox(height: 10),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 13.5,
                 ),
               ),
-              const Icon(Icons.chevron_right, color: ScfColors.textSecondary),
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                style: ScfText.caption.copyWith(fontSize: 11),
+              ),
             ],
           ),
         ),
@@ -237,97 +226,163 @@ class _MatchTile extends ConsumerWidget {
   }
 }
 
-class _Sidebar extends StatelessWidget {
-  const _Sidebar({required this.teamCount, required this.matchCount});
-
-  final int teamCount;
-  final int matchCount;
+class _EmptyHistory extends StatelessWidget {
+  const _EmptyHistory();
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Übersicht',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-                ),
-                const SizedBox(height: 12),
-                _StatRow(label: 'Teams', value: '$teamCount'),
-                const Divider(height: 16),
-                _StatRow(label: 'Spiele gesamt', value: '$matchCount'),
-              ],
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          children: [
+            const Icon(
+              Icons.sports_handball,
+              size: 42,
+              color: ScfColors.textFaint,
             ),
-          ),
+            const SizedBox(height: 12),
+            const Text(
+              'Noch keine Spiele',
+              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Starte oben dein erstes Live-Spiel –\n'
+              'jede Aktion landet sofort in der Statistik.',
+              textAlign: TextAlign.center,
+              style: ScfText.caption,
+            ),
+          ],
         ),
-        const SizedBox(height: 12),
-        _QuickActions(teamCount: teamCount),
-      ],
+      ),
     );
   }
 }
 
-class _StatRow extends StatelessWidget {
-  const _StatRow({required this.label, required this.value});
+class _MatchRow extends StatelessWidget {
+  const _MatchRow({required this.match});
 
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(label,
-            style: const TextStyle(color: ScfColors.textSecondary, fontSize: 13.5)),
-        Text(value,
-            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
-      ],
-    );
-  }
-}
-
-class _QuickActions extends StatelessWidget {
-  const _QuickActions({required this.teamCount});
-
-  final int teamCount;
+  final Match match;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: OutlinedButton.icon(
-            onPressed: () => Navigator.of(context).pushNamed(AppRoutes.teams),
-            icon: const Icon(Icons.groups_outlined),
-            label: const Text('Teams'),
+    int ours = 0;
+    int opponents = 0;
+    for (final event in match.events) {
+      if (event.isOpponent) {
+        if (event.type == MatchEventType.gegentor ||
+            event.type == MatchEventType.gegentorSiebenMeter ||
+            event.type == MatchEventType.gegentorFreiwurf) {
+          opponents++;
+        }
+      } else if (event.type == MatchEventType.tor) {
+        ours++;
+      }
+    }
+    final result = '$ours : $opponents';
+    final live = match.status == MatchStatus.laufend;
+    final phaseLabel = match.phase.label;
+
+    return Card(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => Navigator.of(context).pushNamed(
+          AppRoutes.matchStats,
+          arguments: match.id,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              Container(
+                width: 6,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: live
+                      ? ScfColors.success
+                      : match.status == MatchStatus.beendet
+                          ? ScfColors.accent
+                          : ScfColors.textFaint,
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      match.opponentName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      '${AppFormatters.date(match.date)} · $phaseLabel',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: ScfText.caption.copyWith(fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    result,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 18,
+                      fontFeatures: [FontFeature.tabularFigures()],
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (live) ...[
+                        Container(
+                          width: 7,
+                          height: 7,
+                          decoration: const BoxDecoration(
+                            color: ScfColors.success,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 5),
+                        Text(
+                          'Live',
+                          style: ScfText.caption.copyWith(
+                            fontSize: 10.5,
+                            color: ScfColors.success,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ] else
+                        Text(
+                          'Ansehen',
+                          style: ScfText.caption.copyWith(fontSize: 10.5),
+                        ),
+                      const SizedBox(width: 2),
+                      const Icon(
+                        Icons.chevron_right,
+                        size: 16,
+                        color: ScfColors.textFaint,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: OutlinedButton.icon(
-            onPressed: () =>
-                Navigator.of(context).pushNamed(AppRoutes.playerStats),
-            icon: const Icon(Icons.insights_outlined),
-            label: const Text('Statistiken'),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: OutlinedButton.icon(
-            onPressed: () =>
-                Navigator.of(context).pushNamed(AppRoutes.teamEdit),
-            icon: const Icon(Icons.person_add_outlined),
-            label: const Text('Neu'),
-          ),
-        ),
-      ],
+      ),
     );
   }
 }

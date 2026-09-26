@@ -37,8 +37,10 @@ class Match {
     this.firstHalfSec = 0,
     this.secondHalfSec = 0,
     this.pauseSec = 0,
+    List<String> squadPlayerIds = const [],
     List<MatchEvent> events = const [],
-  }) : events = List.of(events);
+  })  : squadPlayerIds = List.of(squadPlayerIds),
+        events = List.of(events);
 
   final String id;
   final String ownTeamId;
@@ -65,6 +67,9 @@ class Match {
   /// Laufene Dauer der Halbzeitpause in Sekunden.
   final int pauseSec;
 
+  /// Spieler des Aufgebots bei diesem Spiel (leer = alle verfuegbar).
+  final List<String> squadPlayerIds;
+
   final List<MatchEvent> events;
 
   int get halfLengthSec => halfLengthMin * 60;
@@ -90,6 +95,7 @@ class Match {
     int? firstHalfSec,
     int? secondHalfSec,
     int? pauseSec,
+    List<String>? squadPlayerIds,
     List<MatchEvent>? events,
   }) {
     return Match(
@@ -104,12 +110,14 @@ class Match {
       firstHalfSec: firstHalfSec ?? this.firstHalfSec,
       secondHalfSec: secondHalfSec ?? this.secondHalfSec,
       pauseSec: pauseSec ?? this.pauseSec,
+      squadPlayerIds: squadPlayerIds ?? this.squadPlayerIds,
       events: events ?? this.events,
     );
   }
 
   factory Match.fromMap(Map<dynamic, dynamic> map) {
     final eventMaps = (map['events'] as List?) ?? const <dynamic>[];
+    final squadMaps = (map['squadPlayerIds'] as List?) ?? const <dynamic>[];
     return Match(
       id: map['id'] as String,
       ownTeamId: map['ownTeamId'] as String,
@@ -122,6 +130,7 @@ class Match {
       firstHalfSec: (map['firstHalfSec'] as int?) ?? 0,
       secondHalfSec: (map['secondHalfSec'] as int?) ?? 0,
       pauseSec: (map['pauseSec'] as int?) ?? 0,
+      squadPlayerIds: squadMaps.map((e) => e as String).toList(),
       events: eventMaps
           .map((e) => MatchEvent.fromMap(e as Map<dynamic, dynamic>))
           .toList(),
@@ -141,6 +150,7 @@ class Match {
       'firstHalfSec': firstHalfSec,
       'secondHalfSec': secondHalfSec,
       'pauseSec': pauseSec,
+      'squadPlayerIds': squadPlayerIds,
       'events': events.map((e) => e.toMap()).toList(),
     };
   }

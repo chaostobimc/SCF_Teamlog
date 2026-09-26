@@ -369,6 +369,55 @@ KeeperShotMap keeperShotMap(Match match, {String? goalkeeperId}) {
   );
 }
 
+/// Einzelner Gegner-Schuetze im Wurfbild.
+class OpponentShooterStats {
+  const OpponentShooterStats({
+    this.shots = 0,
+    this.onTarget = 0,
+    this.saves = 0,
+    this.conceded = 0,
+    this.misses = 0,
+  });
+
+  final int shots;
+  final int onTarget;
+  final int saves;
+  final int conceded;
+  final int misses;
+
+  double get efficiency => onTarget == 0 ? double.nan : conceded / onTarget;
+
+  OpponentShooterStats add({
+    required bool onTarget,
+    required bool goal,
+  }) {
+    return OpponentShooterStats(
+      shots: shots + 1,
+      onTarget: this.onTarget + (onTarget ? 1 : 0),
+      saves: saves + (onTarget && !goal ? 1 : 0),
+      conceded: conceded + (goal ? 1 : 0),
+      misses: misses + (onTarget ? 0 : 1),
+    );
+  }
+}
+
+/// Wurfbild je Gegner-Trikotnummer (Schluessel 0 = ohne Nummer erfasst).
+Map<int, OpponentShooterStats> opponentShooters(Match match) {
+  final result = <int, OpponentShooterStats>{};
+  for (final event in match.events) {
+    if (!event.isOpponent) continue;
+    final isMiss = event.type == MatchEventType.fehlwurf ||
+        event.type == MatchEventType.wurfGeblockt;
+    final isGoal = event.type == MatchEventType.gegentor ||
+        event.type == MatchEventType.gegentorSiebenMeter ||
+        event.type == MatchEventType.gegentorFreiwurf;
+    final key = event.opponentNumber ?? 0;
+    final current = result[key] ?? const OpponentShooterStats();
+    result[key] = current.add(onTarget: !isMiss, goal: isGoal);
+  }
+  return result;
+}
+
 /// Laufende 2-Minuten-Strafen bei aktueller Spielzeit.
 class ActivePenalty {
   const ActivePenalty({required this.event, required this.endsAtSec});

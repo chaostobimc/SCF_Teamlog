@@ -5,13 +5,11 @@ import '../features/live/live_match_screen.dart';
 import '../features/match_setup/match_setup_screen.dart';
 import '../features/stats/match_stats_screen.dart';
 import '../features/stats/player_stats_screen.dart';
-import '../features/teams/team_edit_screen.dart';
-import '../features/teams/team_list_screen.dart';
+import '../features/teams/squad_screen.dart';
 
 class AppRoutes {
   static const home = '/';
-  static const teams = '/teams';
-  static const teamEdit = '/teams/edit';
+  static const squad = '/squad';
   static const matchSetup = '/match/new';
   static const liveMatch = '/match/live';
   static const matchStats = '/match/stats';
@@ -23,11 +21,8 @@ class AppRouter {
     switch (settings.name) {
       case AppRoutes.home:
         return _fade(const HomeScreen(), settings);
-      case AppRoutes.teams:
-        return _fade(const TeamListScreen(), settings);
-      case AppRoutes.teamEdit:
-        final args = settings.arguments as TeamEditArgs?;
-        return _fade(TeamEditScreen(existing: args?.team), settings);
+      case AppRoutes.squad:
+        return _fade(const SquadScreen(), settings);
       case AppRoutes.matchSetup:
         return _fade(const MatchSetupScreen(), settings);
       case AppRoutes.liveMatch:

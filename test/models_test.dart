@@ -110,4 +110,41 @@ void main() {
     expect(GoalZone.drueber.isOnTarget, isFalse);
     expect(GoalZone.obenMitte.label, 'Oben Mitte');
   });
+
+  test('Gegnernummer und Aufgebot ueberleben den Roundtrip', () {
+    final event = MatchEvent(
+      id: 'e9',
+      playerId: 'p1',
+      type: MatchEventType.gegentor,
+      matchClockSec: 120,
+      phase: MatchPhase.ersteHalbzeit,
+      isOpponent: true,
+      opponentNumber: 7,
+      goalZone: GoalZone.obenLinks,
+      createdAt: DateTime(2026, 9, 26),
+    );
+    final copiedEvent = MatchEvent.fromMap(event.toMap());
+    expect(copiedEvent.isOpponent, isTrue);
+    expect(copiedEvent.opponentNumber, 7);
+
+    final changed = copiedEvent.copyWith(opponentNumber: 9);
+    expect(changed.opponentNumber, 9);
+    expect(copiedEvent.opponentNumber, 7);
+
+    final match = Match(
+      id: 'm2',
+      ownTeamId: 't1',
+      opponentName: 'TSV Nord',
+      date: DateTime(2026, 9, 26),
+      isHome: true,
+      squadPlayerIds: ['p1', 'p2'],
+    );
+    final copiedMatch = Match.fromMap(match.toMap());
+    expect(copiedMatch.squadPlayerIds, ['p1', 'p2']);
+
+    final expanded =
+        copiedMatch.copyWith(squadPlayerIds: ['p1', 'p2', 'p3']);
+    expect(expanded.squadPlayerIds, hasLength(3));
+    expect(copiedMatch.squadPlayerIds, hasLength(2));
+  });
 }

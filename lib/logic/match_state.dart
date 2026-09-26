@@ -25,6 +25,7 @@ class MatchState {
     this.selectedPlayerId,
     this.pendingShot,
     this.lastCourtZone,
+    this.opponentNumber,
     this.notice,
     this.noticeStamp,
   });
@@ -40,6 +41,9 @@ class MatchState {
 
   /// Zuletzt angetippte Feldzone, wird der naechsten Aktion zugeordnet.
   final CourtZone? lastCourtZone;
+
+  /// Trikotnummer des zuletzt erfassten Gegners (fuer Wurfbilder).
+  final int? opponentNumber;
 
   /// Kurzinfo an die Oberflaeche (z. B. Halbzeit erreicht).
   final String? notice;
@@ -58,6 +62,8 @@ class MatchState {
     bool clearPendingShot = false,
     CourtZone? lastCourtZone,
     bool clearCourtZone = false,
+    int? opponentNumber,
+    bool clearOpponentNumber = false,
     String? notice,
     bool clearNotice = false,
     int? noticeStamp,
@@ -69,6 +75,9 @@ class MatchState {
       selectedPlayerId: selectedPlayerId ?? this.selectedPlayerId,
       pendingShot: clearPendingShot ? null : (pendingShot ?? this.pendingShot),
       lastCourtZone: clearCourtZone ? null : (lastCourtZone ?? this.lastCourtZone),
+      opponentNumber: clearOpponentNumber
+          ? null
+          : (opponentNumber ?? this.opponentNumber),
       notice: clearNotice ? null : (notice ?? this.notice),
       noticeStamp: noticeStamp ?? this.noticeStamp,
     );

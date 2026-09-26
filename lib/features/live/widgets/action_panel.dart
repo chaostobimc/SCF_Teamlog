@@ -6,364 +6,251 @@ import '../../../data/models/player.dart';
 import '../../../logic/match_controller.dart';
 import '../../../logic/match_state.dart';
 
-/// Rechte Spalte des Live-Screens: Aktionsauswahl je nach Kontext.
+/// Rechte Aktionszone: Kontextbanner, Gegnernummer, Wurf-Ausgang, Schnellaktionen.
 class ActionPanel extends StatelessWidget {
   const ActionPanel({
     super.key,
     required this.state,
     required this.controller,
+    this.compact = false,
   });
 
   final MatchState state;
   final MatchController controller;
+  final bool compact;
 
-  Player? get _player {
+  @override
+  Widget build(BuildContext context) {
+    final player = _selectedPlayer();
+    final isKeeper = player?.position == PlayerPosition.torwart;
+
+    return Container(
+      margin: EdgeInsets.fromLTRB(compact ? 4 : 8, 8, 8, 8),
+      decoration: BoxDecoration(
+        color: ScfColors.surfaceCard,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: ScfColors.outline),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _Banner(state: state, player: player, controller: controller),
+            if (isKeeper)
+              _OpponentNumberBar(
+                state: state,
+                onPick: controller.setOpponentNumber,
+                onClear: () => controller.setOpponentNumber(null),
+                onKeypad: () => _openKeypad(context),
+              ),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(10),
+                child: state.hasPendingShot
+                    ? _PendingShotBox(
+                        state: state,
+                        controller: controller,
+                        isKeeper: isKeeper,
+                      )
+                    : _QuickBox(
+                        state: state,
+                        controller: controller,
+                        isKeeper: isKeeper,
+                        compact: compact,
+                      ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Player? _selectedPlayer() {
     final id = state.selectedPlayerId;
     if (id == null || state.team == null) return null;
     return state.team!.playerById(id);
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final pending = state.pendingShot;
-    return Card(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(12),
-        child: pending != null
-            ? _ShotResolution(state: state, controller: controller, player: _player)
-            : _QuickActions(state: state, controller: controller, player: _player),
+  void _openKeypad(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => _OpponentKeypad(
+        onConfirm: (number) {
+          controller.setOpponentNumber(number);
+          Navigator.of(dialogContext).pop();
+        },
       ),
     );
   }
 }
 
-// ------------------------------------------------------------ Wurf-Auflösung
+// ------------------------------------------------------------------ Banner
 
-class _ShotResolution extends StatelessWidget {
-  const _ShotResolution({
+class _Banner extends StatelessWidget {
+  const _Banner({
     required this.state,
-    required this.controller,
     required this.player,
+    required this.controller,
   });
 
   final MatchState state;
+  final Player? player;
   final MatchController controller;
-  final Player? player;
 
   @override
   Widget build(BuildContext context) {
-    final pending = state.pendingShot!;
-    final isKeeper = player?.position == PlayerPosition.torwart;
+    final String label;
+    final Color color;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: ScfColors.accentSoft,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(
-                isKeeper ? Icons.back_hand : Icons.sports_handball,
-                color: ScfColors.accent,
-                size: 20,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    isKeeper ? 'Gegnerwurf' : 'Wurf',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 15,
-                    ),
-                  ),
-                  Text(
-                    'Zone: ${pending.goalZone.label}',
-                    style: ScfText.caption,
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        ThrowContextChips(
-          isSevenMeter: pending.isSevenMeter,
-          isFreeThrow: pending.isFreeThrow,
-          onContext: (ctx) => controller.setThrowContext(
-            sevenMeter: ctx == ThrowContext.sevenMeter,
-            freeThrow: ctx == ThrowContext.freeThrow,
-          ),
-        ),
-        const SizedBox(height: 12),
-        if (isKeeper) ...[
-          _BigButton(
-            label: 'Parade',
-            color: ScfColors.success,
-            icon: Icons.back_hand,
-            onPressed: () =>
-                controller.resolvePendingShot(MatchEventType.wurfGehalten),
-          ),
-          const SizedBox(height: 8),
-          _BigButton(
-            label: 'Gegentor',
-            color: ScfColors.danger,
-            icon: Icons.sports_score,
-            onPressed: () =>
-                controller.resolvePendingShot(MatchEventType.tor),
-          ),
-        ] else ...[
-          _BigButton(
-            label: 'Tor',
-            color: ScfColors.success,
-            icon: Icons.check_circle,
-            onPressed: () =>
-                controller.resolvePendingShot(MatchEventType.tor),
-          ),
-          const SizedBox(height: 8),
-          _BigButton(
-            label: 'Gehalten',
-            color: ScfColors.cyan,
-            icon: Icons.back_hand,
-            onPressed: () =>
-                controller.resolvePendingShot(MatchEventType.wurfGehalten),
-          ),
-          const SizedBox(height: 8),
-          _BigButton(
-            label: 'Geblockt',
-            color: ScfColors.warning,
-            icon: Icons.block,
-            onPressed: () =>
-                controller.resolvePendingShot(MatchEventType.wurfGeblockt),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Daneben: Zone am Torrand antippen',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: ScfColors.textFaint, fontSize: 11.5),
-          ),
-        ],
-        const SizedBox(height: 10),
-        TextButton.icon(
-          onPressed: controller.cancelPendingShot,
-          icon: const Icon(Icons.close, size: 16),
-          label: const Text('Abbrechen'),
-        ),
-      ],
-    );
-  }
-}
-
-// -------------------------------------------------------------- Schnellaktion
-
-enum ThrowContext { field, sevenMeter, freeThrow }
-
-class _QuickActions extends StatelessWidget {
-  const _QuickActions({
-    required this.state,
-    required this.controller,
-    required this.player,
-  });
-
-  final MatchState state;
-  final MatchController controller;
-  final Player? player;
-
-  @override
-  Widget build(BuildContext context) {
-    final isKeeper = player?.position == PlayerPosition.torwart;
-    final throwContext = state.lastCourtZone == CourtZone.siebenMeter
-        ? ThrowContext.sevenMeter
-        : (state.lastCourtZone == CourtZone.freiwurf
-            ? ThrowContext.freeThrow
-            : ThrowContext.field);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _PlayerHeader(player: player),
-        const SizedBox(height: 10),
-        ThrowContextChips(
-          isSevenMeter: throwContext == ThrowContext.sevenMeter,
-          isFreeThrow: throwContext == ThrowContext.freeThrow,
-          onContext: (ctx) => controller.setQuickContext(switch (ctx) {
-            ThrowContext.sevenMeter => CourtZone.siebenMeter,
-            ThrowContext.freeThrow => CourtZone.freiwurf,
-            ThrowContext.field => null,
-          }),
-        ),
-        const SizedBox(height: 14),
-        if (isKeeper) ...[
-          const _SectionTitle('Torwart'),
-          const SizedBox(height: 8),
-          _grid([
-            _ActionDef('Parade', ScfColors.success, Icons.back_hand,
-                () => controller.commitQuickAction(MatchEventType.parade)),
-            _ActionDef('Gegentor', ScfColors.danger, Icons.sports_score,
-                () => controller.commitQuickAction(MatchEventType.gegentor)),
-          ]),
-          const SizedBox(height: 14),
-          const _SectionTitle('Gegnerwurf'),
-          const SizedBox(height: 8),
-          _grid([
-            _ActionDef('Gegner: daneben', ScfColors.warning, Icons.close,
-                () => controller.commitOpponentAction(MatchEventType.fehlwurf)),
-            _ActionDef(
-                'Gegner: geblockt',
-                ScfColors.cyan,
-                Icons.block,
-                () =>
-                    controller.commitOpponentAction(MatchEventType.wurfGeblockt)),
-          ]),
-          const SizedBox(height: 8),
-          const Text(
-            'Für das genaue Wurfbild: Torzone antippen, dann Parade/Gegentor.',
-            style: TextStyle(color: ScfColors.textFaint, fontSize: 11.5),
-          ),
-        ] else ...[
-          const _SectionTitle('Wurf: Zone im Tor antippen'),
-          const SizedBox(height: 8),
-          _grid([
-            _ActionDef('Fehlwurf', ScfColors.danger, Icons.close,
-                () => controller.commitQuickAction(MatchEventType.fehlwurf)),
-            _ActionDef('Geblockt', ScfColors.warning, Icons.block,
-                () => controller.commitQuickAction(MatchEventType.wurfGeblockt)),
-            _ActionDef('Schrittfehler', null, Icons.directions_walk,
-                () => controller.commitQuickAction(MatchEventType.schrittfehler)),
-            _ActionDef('Prellfehler', null, Icons.sports_basketball,
-                () => controller.commitQuickAction(MatchEventType.prellfehler)),
-            _ActionDef('Stürmerfoul', null, Icons.sports_mma,
-                () => controller.commitQuickAction(MatchEventType.stuermerfoul)),
-            _ActionDef('Ballverlust', ScfColors.danger, Icons.report,
-                () => controller.commitQuickAction(MatchEventType.ballverlust)),
-            _ActionDef('Gefoult', ScfColors.success, Icons.person_off,
-                () => controller.commitQuickAction(MatchEventType.gefoult)),
-            _ActionDef('7m geholt', ScfColors.success, Icons.flag,
-                () => controller
-                    .commitQuickAction(MatchEventType.siebenMeterHerausgeholt)),
-            _ActionDef('Duell gewonnen', ScfColors.success, Icons.sports_kabaddi,
-                () => controller.commitQuickAction(MatchEventType.duelGewonnen)),
-          ]),
-        ],
-        const SizedBox(height: 14),
-        const _SectionTitle('Sanktionen'),
-        const SizedBox(height: 8),
-        _grid([
-          _ActionDef('Gelbe Karte', ScfColors.warning, Icons.style,
-              () => controller.commitQuickAction(MatchEventType.gelbeKarte)),
-          _ActionDef('2 Minuten', ScfColors.accent, Icons.timer,
-              () => controller.commitQuickAction(MatchEventType.zeitstrafe)),
-          _ActionDef('Rote Karte', ScfColors.danger, Icons.style,
-              () => controller.commitQuickAction(MatchEventType.roteKarte)),
-          _ActionDef('Blaue Karte', ScfColors.cyan, Icons.style,
-              () => controller.commitQuickAction(MatchEventType.blaueKarte)),
-        ]),
-      ],
-    );
-  }
-
-  Widget _grid(List<_ActionDef> defs) {
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 8,
-      crossAxisSpacing: 8,
-      childAspectRatio: 2.5,
-      children: [
-        for (final def in defs)
-          _ActionButton(def: def, enabled: player != null),
-      ],
-    );
-  }
-}
-
-class _SectionTitle extends StatelessWidget {
-  const _SectionTitle(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(text.toUpperCase(), style: ScfText.sectionLabel);
-  }
-}
-
-class _PlayerHeader extends StatelessWidget {
-  const _PlayerHeader({required this.player});
-
-  final Player? player;
-
-  @override
-  Widget build(BuildContext context) {
-    final player = this.player;
-    if (player == null) {
-      return Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-        decoration: BoxDecoration(
-          color: ScfColors.surfaceRaised,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: ScfColors.outline),
-        ),
-        child: const Text(
-          'Spieler in der Leiste auswählen',
-          style: TextStyle(color: ScfColors.textSecondary),
-        ),
-      );
+    if (state.hasPendingShot) {
+      label = 'Wurf aufs Tor – Ergebnis tippen';
+      color = ScfColors.success;
+    } else if (player == null) {
+      label = 'Trikotnummer links wählen – dann Aktion tippen';
+      color = ScfColors.textSecondary;
+    } else if (player!.position == PlayerPosition.torwart) {
+      final number = state.opponentNumber;
+      label = number == null
+          ? 'Torwart ${player!.shortName} – Gegner-Aktion erfassen'
+          : 'Torwart ${player!.shortName} – Gegner #$number';
+      color = ScfColors.cyan;
+    } else {
+      label = 'Aktion für ${player!.shortName} (#${player!.number})';
+      color = ScfColors.accent;
     }
-    final isKeeper = player.position == PlayerPosition.torwart;
+
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: ScfColors.surfaceRaised,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isKeeper ? ScfColors.cyan : ScfColors.accent,
-          width: 1.2,
+        color: color.withValues(alpha: 0.12),
+        border: const Border(
+          bottom: BorderSide(color: ScfColors.outlineSoft),
         ),
       ),
       child: Row(
         children: [
           Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: (isKeeper ? ScfColors.cyan : ScfColors.accent)
-                  .withValues(alpha: 0.18),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            alignment: Alignment.center,
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
             child: Text(
-              '${player.number}',
-              style: TextStyle(
-                fontWeight: FontWeight.w900,
-                fontSize: 16,
-                color: isKeeper ? ScfColors.cyan : ScfColors.accent,
+              label,
+              style: const TextStyle(
+                color: ScfColors.textPrimary,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
               ),
             ),
           ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  player.fullName,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w700),
+          if (state.hasPendingShot)
+            TextButton(
+              onPressed: controller.cancelPendingShot,
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                minimumSize: const Size(0, 28),
+              ),
+              child: const Text('Storno', style: TextStyle(fontSize: 11)),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ------------------------------------------------------- Gegner-Nummernleiste
+
+class _OpponentNumberBar extends StatelessWidget {
+  const _OpponentNumberBar({
+    required this.state,
+    required this.onPick,
+    required this.onClear,
+    required this.onKeypad,
+  });
+
+  final MatchState state;
+  final ValueChanged<int?> onPick;
+  final VoidCallback onClear;
+  final VoidCallback onKeypad;
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = state.opponentNumber;
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: ScfColors.outlineSoft)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Text('GEGNER-NUMMER', style: ScfText.sectionLabel),
+              const SizedBox(width: 8),
+              if (selected != null)
+                GestureDetector(
+                  onTap: onClear,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: ScfColors.cyanSoft,
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(
+                        color: ScfColors.cyan.withValues(alpha: 0.5),
+                      ),
+                    ),
+                    child: Text(
+                      '#$selected ×',
+                      style: const TextStyle(
+                        color: ScfColors.cyan,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
                 ),
-                Text(
-                  isKeeper ? 'Torwart' : 'Feldspieler',
-                  style: ScfText.caption.copyWith(fontSize: 11),
+              const Spacer(),
+              IconButton(
+                tooltip: 'Nummer direkt eingeben',
+                onPressed: onKeypad,
+                iconSize: 18,
+                visualDensity: VisualDensity.compact,
+                icon: const Icon(
+                  Icons.dialpad,
+                  color: ScfColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          SizedBox(
+            height: 36,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                for (var n = 1; n <= 20; n++)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: _NumberPickChip(
+                      number: n,
+                      selected: selected == n,
+                      onTap: () => onPick(n),
+                    ),
+                  ),
+                _NumberPickChip(
+                  number: 0,
+                  label: '—',
+                  selected: false,
+                  onTap: onClear,
                 ),
               ],
             ),
@@ -374,60 +261,168 @@ class _PlayerHeader extends StatelessWidget {
   }
 }
 
-class ThrowContextChips extends StatelessWidget {
-  const ThrowContextChips({
-    super.key,
-    required this.isSevenMeter,
-    required this.isFreeThrow,
-    required this.onContext,
+class _NumberPickChip extends StatelessWidget {
+  const _NumberPickChip({
+    required this.number,
+    required this.selected,
+    required this.onTap,
+    this.label,
   });
 
-  final bool isSevenMeter;
-  final bool isFreeThrow;
-  final ValueChanged<ThrowContext>? onContext;
+  final int number;
+  final bool selected;
+  final VoidCallback onTap;
+  final String? label;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 100),
+        width: 38,
+        decoration: BoxDecoration(
+          color: selected ? ScfColors.cyan : ScfColors.surfaceRaised,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: selected ? ScfColors.cyan : ScfColors.outline,
+          ),
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          label ?? '$number',
+          style: TextStyle(
+            fontWeight: FontWeight.w800,
+            fontSize: 13,
+            color: selected ? Colors.black : ScfColors.textPrimary,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ------------------------------------------------------ Wurf-Ausgang (pending)
+
+class _PendingShotBox extends StatelessWidget {
+  const _PendingShotBox({
+    required this.state,
+    required this.controller,
+    required this.isKeeper,
+  });
+
+  final MatchState state;
+  final MatchController controller;
+  final bool isKeeper;
+
+  @override
+  Widget build(BuildContext context) {
+    final pending = state.pendingShot!;
+    final sevenMeter = pending.isSevenMeter;
+    final freeThrow = pending.isFreeThrow;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Expanded(
-          child: _contextChip(
-              'Feldwurf', ThrowContext.field, !isSevenMeter && !isFreeThrow),
+        Text(
+          'Wurfziel: ${pending.goalZone.label}'
+          '${sevenMeter ? ' · 7-Meter' : (freeThrow ? ' · Freiwurf' : '')}',
+          style: ScfText.sectionLabel,
         ),
-        const SizedBox(width: 6),
-        Expanded(
-          child: _contextChip('7 m', ThrowContext.sevenMeter, isSevenMeter),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(
+              child: ScfTile(
+                label: isKeeper ? 'Gegentor' : 'Tor',
+                icon: Icons.sports_score,
+                color: isKeeper ? ScfColors.danger : ScfColors.success,
+                onTap: () => controller.resolvePendingShot(MatchEventType.tor),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: ScfTile(
+                label: isKeeper ? 'Parade' : 'Gehalten',
+                icon: Icons.shield_outlined,
+                color: isKeeper ? ScfColors.success : ScfColors.danger,
+                onTap: () => controller
+                    .resolvePendingShot(MatchEventType.wurfGehalten),
+              ),
+            ),
+            const SizedBox(width: 6),
+            if (!isKeeper)
+              Expanded(
+                child: ScfTile(
+                  label: 'Block',
+                  icon: Icons.block,
+                  color: ScfColors.warning,
+                  onTap: () => controller
+                      .resolvePendingShot(MatchEventType.wurfGeblockt),
+                ),
+              )
+            else
+              const Expanded(child: SizedBox(width: 6)),
+          ],
         ),
-        const SizedBox(width: 6),
-        Expanded(
-          child:
-              _contextChip('Freiwurf', ThrowContext.freeThrow, isFreeThrow),
+        const SizedBox(height: 12),
+        const Text('WURFART', style: ScfText.sectionLabel),
+        const SizedBox(height: 6),
+        Row(
+          children: [
+            Expanded(
+              child: _contextChip(
+                label: 'Feld',
+                selected: !sevenMeter && !freeThrow,
+                onTap: () =>
+                    controller.setThrowContext(sevenMeter: false, freeThrow: false),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: _contextChip(
+                label: '7-Meter',
+                selected: sevenMeter,
+                onTap: () => controller.setThrowContext(sevenMeter: true),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: _contextChip(
+                label: 'Freiwurf',
+                selected: freeThrow,
+                onTap: () => controller.setThrowContext(freeThrow: true),
+              ),
+            ),
+          ],
         ),
       ],
     );
   }
 
-  Widget _contextChip(String label, ThrowContext ctx, bool active) {
-    return InkWell(
-      onTap: onContext == null ? null : () => onContext!(ctx),
-      borderRadius: BorderRadius.circular(10),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 120),
-        height: 36,
-        alignment: Alignment.center,
+  Widget _contextChip({
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8),
         decoration: BoxDecoration(
-          color: active ? ScfColors.accent : ScfColors.surfaceRaised,
+          color: selected ? ScfColors.accentSoft : ScfColors.surfaceRaised,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: active ? ScfColors.accent : ScfColors.outline,
+            color: selected ? ScfColors.accent : ScfColors.outline,
           ),
         ),
+        alignment: Alignment.center,
         child: Text(
           label,
           style: TextStyle(
-            color: active ? Colors.black : ScfColors.textSecondary,
-            fontWeight: active ? FontWeight.w800 : FontWeight.w600,
-            fontSize: 12.5,
+            fontSize: 11.5,
+            fontWeight: FontWeight.w800,
+            color: selected ? ScfColors.accent : ScfColors.textSecondary,
           ),
         ),
       ),
@@ -435,114 +430,207 @@ class ThrowContextChips extends StatelessWidget {
   }
 }
 
-class _ActionDef {
-  const _ActionDef(this.label, this.color, this.icon, this.onPressed);
+// ------------------------------------------------------------ Schnellaktionen
 
-  final String label;
-  final Color? color;
-  final IconData? icon;
-  final VoidCallback onPressed;
-}
-
-class _ActionButton extends StatelessWidget {
-  const _ActionButton({required this.def, required this.enabled});
-
-  final _ActionDef def;
-  final bool enabled;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = def.color;
-    return Material(
-      color: enabled
-          ? (color?.withValues(alpha: 0.14) ?? ScfColors.surfaceRaised)
-          : ScfColors.surface,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        onTap: enabled ? def.onPressed : null,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: enabled
-                  ? (color?.withValues(alpha: 0.55) ?? ScfColors.outline)
-                  : ScfColors.outlineSoft,
-            ),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          alignment: Alignment.centerLeft,
-          child: Row(
-            children: [
-              if (def.icon != null) ...[
-                Icon(def.icon,
-                    size: 17,
-                    color: enabled
-                        ? (color ?? ScfColors.textPrimary)
-                        : ScfColors.textFaint),
-                const SizedBox(width: 8),
-              ],
-              Expanded(
-                child: Text(
-                  def.label,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: enabled
-                        ? ScfColors.textPrimary
-                        : ScfColors.textFaint,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 12.5,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _BigButton extends StatelessWidget {
-  const _BigButton({
-    required this.label,
-    required this.color,
-    required this.icon,
-    required this.onPressed,
+class _QuickBox extends StatelessWidget {
+  const _QuickBox({
+    required this.state,
+    required this.controller,
+    required this.isKeeper,
+    required this.compact,
   });
 
-  final String label;
-  final Color color;
-  final IconData icon;
-  final VoidCallback onPressed;
+  final MatchState state;
+  final MatchController controller;
+  final bool isKeeper;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 54,
-      child: Material(
-        color: color,
-        borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          onTap: onPressed,
-          borderRadius: BorderRadius.circular(12),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+    final tiles = <Widget>[
+      if (!isKeeper) ...[
+        _tile('Tor', ScfColors.success, Icons.sports_score,
+            () => controller.commitQuickAction(MatchEventType.tor)),
+        _tile('Fehlwurf', ScfColors.warning, Icons.close,
+            () => controller.commitQuickAction(MatchEventType.fehlwurf)),
+        _tile('Geblockt', ScfColors.warning, Icons.block,
+            () => controller.commitQuickAction(MatchEventType.wurfGeblockt)),
+        _tile('Ballverlust', ScfColors.danger, Icons.sync_problem,
+            () => controller.commitQuickAction(MatchEventType.ballverlust)),
+        _tile('Schrittfehler', ScfColors.warning, Icons.directions_walk,
+            () => controller.commitQuickAction(MatchEventType.schrittfehler)),
+        _tile('Prellfehler', ScfColors.warning, Icons.loop,
+            () => controller.commitQuickAction(MatchEventType.prellfehler)),
+        _tile('Gefoult', ScfColors.cyan, Icons.back_hand,
+            () => controller.commitQuickAction(MatchEventType.gefoult)),
+        _tile('7m geholt', ScfColors.success, Icons.gps_fixed,
+            () => controller
+                .commitQuickAction(MatchEventType.siebenMeterHerausgeholt)),
+        _tile('Duell gew.', ScfColors.violet, Icons.sports_martial_arts,
+            () => controller.commitQuickAction(MatchEventType.duelGewonnen)),
+        _tile('Stürmerfoul', ScfColors.warning, Icons.report_problem,
+            () => controller.commitQuickAction(MatchEventType.stuermerfoul)),
+        _tile('Gelb', ScfColors.warning, Icons.style,
+            () => controller.commitQuickAction(MatchEventType.gelbeKarte)),
+        _tile('2 min', ScfColors.warning, Icons.timer_outlined,
+            () => controller.commitQuickAction(MatchEventType.zeitstrafe)),
+        _tile('Rot', ScfColors.danger, Icons.flag,
+            () => controller.commitQuickAction(MatchEventType.roteKarte)),
+        _tile('Blau', ScfColors.cyan, Icons.flag_circle,
+            () => controller.commitQuickAction(MatchEventType.blaueKarte)),
+      ] else ...[
+        _tile('Fehlwurf', ScfColors.cyan, Icons.close,
+            () => controller.commitOpponentAction(MatchEventType.fehlwurf)),
+        _tile('Block', ScfColors.cyan, Icons.block,
+            () => controller.commitOpponentAction(MatchEventType.wurfGeblockt)),
+        _tile('7m daneben', ScfColors.cyan, Icons.gps_fixed,
+            () => controller.commitOpponentAction(MatchEventType.fehlwurf)),
+        _tile('Auszeit', ScfColors.textSecondary, Icons.free_breakfast,
+            controller.timeout),
+      ],
+    ];
+
+    final hint = isKeeper
+        ? 'Gegnerwurf: Ziel im Tor tippen, dann „Gegentor“ oder „Parade“.\n'
+            'Daneben/Block direkt hier tippen. Gegnernummer bleibt aktiv.'
+        : 'Trikotnummer links wählen – dann Aktion tippen.\n'
+            'Tastatur: 1–9 Spieler · Leertaste Uhr · Z Rückgängig';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var row = 0; row < tiles.length; row += 3) ...[
+          Row(
             children: [
-              Icon(icon, color: Colors.black, size: 22),
-              const SizedBox(width: 10),
-              Text(
-                label,
-                style: const TextStyle(
-                  color: Colors.black,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 16,
-                ),
-              ),
+              for (var col = 0; col < 3; col++)
+                if (row + col < tiles.length)
+                  Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(
+                        col == 0 ? 0 : 5,
+                        0,
+                        col == 2 ? 0 : 5,
+                        8,
+                      ),
+                      child: SizedBox(height: 50, child: tiles[row + col]),
+                    ),
+                  )
+                else
+                  const Expanded(child: SizedBox(width: 5, height: 50)),
             ],
           ),
-        ),
+        ],
+        const SizedBox(height: 2),
+        Text(hint, style: ScfText.caption.copyWith(fontSize: 10.5)),
+      ],
+    );
+  }
+
+  Widget _tile(
+    String label,
+    Color color,
+    IconData icon,
+    VoidCallback onTap,
+  ) {
+    return ScfTile(
+      label: label,
+      icon: icon,
+      color: color,
+      dense: compact,
+      onTap: onTap,
+    );
+  }
+
+}
+
+// ------------------------------------------------------------- Zahlen-Keypad
+
+class _OpponentKeypad extends StatefulWidget {
+  const _OpponentKeypad({required this.onConfirm});
+
+  final ValueChanged<int> onConfirm;
+
+  @override
+  State<_OpponentKeypad> createState() => _OpponentKeypadState();
+}
+
+class _OpponentKeypadState extends State<_OpponentKeypad> {
+  String _buffer = '';
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Gegner-Nummer'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 120,
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            decoration: BoxDecoration(
+              color: ScfColors.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: ScfColors.outline),
+            ),
+            child: Text(
+              _buffer.isEmpty ? '–' : _buffer,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.w900,
+                color: ScfColors.cyan,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          for (final row in [
+            ['1', '2', '3'],
+            ['4', '5', '6'],
+            ['7', '8', '9'],
+            ['←', '0', 'OK'],
+          ])
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                children: [
+                  for (final key in row)
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 3),
+                        child: OutlinedButton(
+                          onPressed: () => _press(key),
+                          child: Text(
+                            key,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
+  }
+
+  void _press(String key) {
+    setState(() {
+      if (key == '←') {
+        if (_buffer.isNotEmpty) {
+          _buffer = _buffer.substring(0, _buffer.length - 1);
+        }
+      } else if (key == 'OK') {
+        final value = int.tryParse(_buffer);
+        if (value != null && value > 0) {
+          widget.onConfirm(value);
+        }
+      } else if (_buffer.length < 2) {
+        _buffer += key;
+      }
+    });
   }
 }

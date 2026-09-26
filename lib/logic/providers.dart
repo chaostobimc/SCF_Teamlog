@@ -6,6 +6,7 @@ import '../data/models/match.dart';
 import '../data/models/team.dart';
 import '../data/repositories/match_repository.dart';
 import '../data/repositories/team_repository.dart';
+import '../data/database/seed.dart';
 import 'match_controller.dart';
 import 'match_state.dart';
 
@@ -66,4 +67,14 @@ final matchControllerProvider =
   final match = repository.byId(matchId);
   final team = match == null ? null : teamRepository.byId(match.ownTeamId);
   return MatchController(repository, match: match, team: team);
+});
+
+/// Die feste Mannschaft der App: SC Freising (einzige Mannschaft).
+final scfTeamProvider = Provider<Team>((ref) {
+  final teams = ref.watch(teamsProvider).valueOrNull ?? const <Team>[];
+  for (final team in teams) {
+    if (team.id == scfTeamId) return team;
+  }
+  final fromBox = ref.watch(teamRepositoryProvider).byId(scfTeamId);
+  return fromBox ?? seedScfTeamModel();
 });
