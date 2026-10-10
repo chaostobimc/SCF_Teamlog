@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 380">
+  <defs>
+    <pattern id="rauten" width="44" height="44" patternUnits="userSpaceOnUse" patternTransform="rotate(40)">
+      <rect width="22" height="22" fill="#111"/>
+      <rect x="22" y="22" width="22" height="22" fill="#111"/>
+    </pattern>
+    <clipPath id="innen">
+      <path d="M46 164 H254 V250 Q254 318 150 334 Q46 318 46 250 Z"/>
+    </clipPath>
+  </defs>
+  <!-- Schild -->
+  <path d="M30 150 H270 V252 Q270 336 150 358 Q30 336 30 252 Z" fill="#fff" stroke="#111" stroke-width="7"/>
+  <path d="M42 162 H258 V250 Q258 320 150 340 Q42 320 42 250 Z" fill="none" stroke="#111" stroke-width="3"/>
+  <!-- Rautenfeld oben -->
+  <rect x="46" y="164" width="208" height="88" fill="url(#rauten)" clip-path="url(#innen)"/>
+  <line x1="42" y1="252" x2="258" y2="252" stroke="#111" stroke-width="3"/>
+  <!-- Bär unten -->
+  <g fill="#111">
+    <ellipse cx="150" cy="296" rx="44" ry="24"/>
+    <circle cx="106" cy="292" r="15"/>
+    <rect x="124" y="312" width="9" height="26" rx="3"/>
+    <rect x="150" y="312" width="9" height="26" rx="3"/>
+    <rect x="170" y="312" width="9" height="26" rx="3"/>
+    <rect x="186" y="312" width="9" height="26" rx="3"/>
+  </g>
+  <circle cx="158" cy="286" r="17" fill="none" stroke="#fff" stroke-width="3"/>
+  <path d="M158 269 V303 M141 286 H175" stroke="#fff" stroke-width="3"/>
+  <!-- Verschraenktes SC -->
+  <g fill="none" stroke-linecap="round">
+    <path d="M196 46 C150 26 118 44 124 80 C130 112 196 118 200 150 C204 180 160 196 126 180" stroke="#111" stroke-width="30"/>
+    <path d="M196 46 C150 26 118 44 124 80 C130 112 196 118 200 150 C204 180 160 196 126 180" stroke="#fff" stroke-width="12"/>
+    <path d="M232 70 C226 46 200 36 182 40" stroke="#111" stroke-width="26"/>
+    <path d="M232 70 C226 46 200 36 182 40" stroke="#fff" stroke-width="8"/>
+  </g>
+</svg>

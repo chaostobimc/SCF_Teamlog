@@ -1,5 +1,5 @@
 // Service Worker: macht die App offline nutzbar (Cache-first fuer die eigenen Dateien).
-const CACHE = 'scf-teamlog-v5';
+const CACHE = 'scf-teamlog-v6';
 const ASSETS = [
   './',
   './index.html',
@@ -19,6 +19,7 @@ const ASSETS = [
   './js/views/data.js',
   './manifest.webmanifest',
   './icon.svg',
+  './img/logo.svg',
 ];
 
 self.addEventListener('install', (event) => {
