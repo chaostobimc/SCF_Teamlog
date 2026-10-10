@@ -44,7 +44,7 @@ export function renderStats({ store, navigate }) {
         footer: ['Team', '', '', String(total.shots), String(total.goals), pct(totalD.shotRatio), `${total.goalsSevenMeter}/${total.shotsSevenMeter}`, String(total.saves), pct(derived(total).saveRatio), String(total.conceded), String(total.ballLosses), String(totalD.technicalErrors), String(total.duelsWon), String(totalD.sanctions)],
         caption: 'Spielerstatistik alle Zeiten',
       })
-    : emptyState({ icon: '📊', title: 'Noch keine Spieler', text: 'Lege zuerst den Kader an.', action: h('a', { class: 'btn primary', href: '#/kader' }, 'Zum Kader') });
+    : emptyState({ title: 'Noch keine Spieler', text: 'Lege zuerst den Kader an.', action: h('a', { class: 'btn primary', href: '#/kader' }, 'Zum Kader') });
 
   const exportBtn = h('button', {
     class: 'btn ghost', type: 'button', onclick: () => {
@@ -62,10 +62,10 @@ export function renderStats({ store, navigate }) {
       actions: [exportBtn],
     }),
     h('section', { class: 'kpi-grid' },
-      statCard({ label: 'Spiele', value: matches.length, icon: '🏟' }),
-      statCard({ label: 'Tore gesamt', value: total.goals, sub: `Quote ${pct(totalD.shotRatio)}`, tone: 'accent', icon: '⚽' }),
-      statCard({ label: 'Paraden gesamt', value: total.saves, sub: `Quote ${pct(derived(total).saveRatio)}`, tone: 'cyan', icon: '🧤' }),
-      statCard({ label: 'Ballverluste', value: total.ballLosses, sub: `${totalD.technicalErrors} Technikfehler`, tone: 'warn', icon: '🔄' }),
+      statCard({ label: 'Spiele', value: matches.length }),
+      statCard({ label: 'Tore gesamt', value: total.goals, sub: `Quote ${pct(totalD.shotRatio)}`, tone: 'accent' }),
+      statCard({ label: 'Paraden gesamt', value: total.saves, sub: `Quote ${pct(derived(total).saveRatio)}`, tone: 'cyan' }),
+      statCard({ label: 'Ballverluste', value: total.ballLosses, sub: `${totalD.technicalErrors} Technikfehler`, tone: 'warn' }),
     ),
     h('section', { class: 'card table-card' }, table),
   );
@@ -132,7 +132,7 @@ export function renderPlayerDetail({ store, navigate, params }) {
         onRowClick: (r) => navigate(`/spiel/${r.match.id}`),
         footer: ['Gesamt', '', String(total.shots), String(total.goals), pct(totalD.shotRatio), `${total.goalsSevenMeter}/${total.shotsSevenMeter}`, String(total.saves), pct(derived(total).saveRatio), String(total.conceded), String(total.ballLosses), String(totalD.technicalErrors), String(totalD.sanctions)],
       })
-    : emptyState({ icon: '📋', title: 'Noch keine Spiele', text: 'Dieser Spieler hat noch in keinem Spiel mitgewirkt.' });
+    : emptyState({ title: 'Noch keine Spiele', text: 'Dieser Spieler hat noch in keinem Spiel mitgewirkt.' });
 
   return h('div', { class: 'page' },
     h('nav', { class: 'breadcrumb no-print' }, h('a', { href: '#/statistik' }, 'Statistik'), ' / ', h('span', {}, playerFullName(player))),
@@ -145,13 +145,13 @@ export function renderPlayerDetail({ store, navigate, params }) {
     h('div', { class: 'tags-row' }, positionTag(player), player.gameRole !== 'keine' ? h('span', { class: 'tag' }, roleLabel(player.gameRole)) : null),
     h('section', { class: 'kpi-grid' },
       isKeeper
-        ? statCard({ label: 'Paraden', value: total.saves, sub: `Quote ${pct(derived(total).saveRatio)}`, tone: 'cyan', icon: '🧤' })
-        : statCard({ label: 'Tore', value: total.goals, sub: `von ${total.shots} Würfen · ${pct(totalD.shotRatio)}`, tone: 'accent', icon: '🎯' }),
+        ? statCard({ label: 'Paraden', value: total.saves, sub: `Quote ${pct(derived(total).saveRatio)}`, tone: 'cyan' })
+        : statCard({ label: 'Tore', value: total.goals, sub: `von ${total.shots} Würfen · ${pct(totalD.shotRatio)}`, tone: 'accent' }),
       isKeeper
-        ? statCard({ label: 'Gegentore', value: total.conceded, sub: `7m ${total.concededSevenMeter} · FW ${total.concededFreeThrow}`, tone: 'warn', icon: '🥅' })
-        : statCard({ label: '7-Meter', value: `${total.goalsSevenMeter}/${total.shotsSevenMeter}`, sub: `${total.sevenMeterWon} herausgeholt`, tone: 'violet', icon: '7️⃣' }),
-      statCard({ label: 'Spiele', value: rows.length, sub: `${allMatches.length} gesamt`, icon: '🏟' }),
-      statCard({ label: 'Strafen', value: totalD.sanctions, sub: `${total.twoMinutes} × 2 min · ${total.yellowCards} Gelb`, icon: '⏱' }),
+        ? statCard({ label: 'Gegentore', value: total.conceded, sub: `7m ${total.concededSevenMeter} · FW ${total.concededFreeThrow}`, tone: 'warn' })
+        : statCard({ label: '7-Meter', value: `${total.goalsSevenMeter}/${total.shotsSevenMeter}`, sub: `${total.sevenMeterWon} herausgeholt`, tone: 'violet' }),
+      statCard({ label: 'Spiele', value: rows.length, sub: `${allMatches.length} gesamt` }),
+      statCard({ label: 'Strafen', value: totalD.sanctions, sub: `${total.twoMinutes} × 2 min · ${total.yellowCards} Gelb` }),
     ),
     rows.length
       ? h('section', { class: 'card' },

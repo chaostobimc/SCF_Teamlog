@@ -33,9 +33,9 @@ export function renderSquad({ store }) {
     const fieldCount = all.filter((p) => p.position === 'feldspieler').length;
     const keeperCount = all.length - fieldCount;
     countHost.replaceChildren(
-      statCard({ label: 'Kader', value: all.length, sub: 'Spieler gesamt', icon: '👥' }),
-      statCard({ label: 'Feldspieler', value: fieldCount, tone: 'accent', icon: '🤾' }),
-      statCard({ label: 'Torhüter', value: keeperCount, tone: 'cyan', icon: '🧤' }),
+      statCard({ label: 'Kader', value: all.length, sub: 'Spieler gesamt' }),
+      statCard({ label: 'Feldspieler', value: fieldCount, tone: 'accent' }),
+      statCard({ label: 'Torhüter', value: keeperCount, tone: 'cyan' }),
     );
 
     const shown = all.filter((p) => {
@@ -46,7 +46,6 @@ export function renderSquad({ store }) {
 
     listHost.replaceChildren(...(all.length === 0
       ? [emptyState({
-          icon: '👥',
           title: 'Noch keine Spieler im Kader',
           text: 'Trikotnummer, Name, Position und Rolle hinzufügen – danach erscheint der Kader im Live-Spiel.',
           action: h('button', { class: 'btn primary', type: 'button', onclick: () => editPlayer(null) }, 'Ersten Spieler anlegen'),
@@ -81,7 +80,7 @@ export function renderSquad({ store }) {
       h('button', {
         class: 'icon-btn ghost-danger', type: 'button', title: 'Spieler löschen', 'aria-label': `${playerFullName(p)} löschen`,
         onclick: () => removePlayer(p),
-      }, '🗑'),
+      }, '✕'),
     );
   }
 

@@ -37,7 +37,7 @@ export function renderHome({ store }) {
       h('div', { class: 'hero-actions' },
         live
           ? h('a', { class: 'btn primary xl', href: `#/spiel/${live.id}/live` }, h('i', { class: 'dot live-dot' }), `Weiter: ${live.opponentName || 'Spiel'} ansehen`)
-          : h('a', { class: 'btn primary xl', href: '#/spiel/neu' }, '▶  Spiel starten'),
+          : h('a', { class: 'btn primary xl', href: '#/spiel/neu' }, 'Spiel starten'),
         h('a', { class: 'btn ghost lg', href: '#/kader' }, `Kader (${playerCount})`),
         h('a', { class: 'btn ghost lg', href: '#/statistik' }, 'Statistik'),
       ),
@@ -45,10 +45,10 @@ export function renderHome({ store }) {
   );
 
   const kpis = h('section', { class: 'kpi-grid' },
-    statCard({ label: 'Spiele', value: matches.length, sub: `${finished.length} beendet`, icon: '🏟' }),
-    statCard({ label: 'Bilanz', value: `${wins} · ${draws} · ${losses}`, sub: 'Siege · Unentschieden · Niederlagen', tone: 'accent', icon: '🏆' }),
-    statCard({ label: 'Tore', value: `${goalsFor} : ${goalsAgainst}`, sub: 'erzielt : kassiert', tone: 'cyan', icon: '⚽' }),
-    statCard({ label: 'Ø Tore', value: matches.length ? (goalsFor / matches.length).toFixed(1).replace('.', ',') : '–', sub: 'pro Spiel', tone: 'violet', icon: '📈' }),
+    statCard({ label: 'Spiele', value: matches.length, sub: `${finished.length} beendet` }),
+    statCard({ label: 'Bilanz', value: `${wins} · ${draws} · ${losses}`, sub: 'Siege · Unentschieden · Niederlagen', tone: 'accent' }),
+    statCard({ label: 'Tore', value: `${goalsFor} : ${goalsAgainst}`, sub: 'erzielt : kassiert', tone: 'cyan' }),
+    statCard({ label: 'Ø Tore', value: matches.length ? (goalsFor / matches.length).toFixed(1).replace('.', ',') : '–', sub: 'pro Spiel', tone: 'violet' }),
   );
 
   const formStrip = last ? h('section', { class: 'card last-match' },
@@ -90,7 +90,6 @@ export function renderHome({ store }) {
     listHost.replaceChildren(
       ...(matches.length === 0
         ? [emptyState({
-            icon: '🤾',
             title: 'Noch keine Spiele',
             text: 'Lege dein erstes Spiel an und erfasse Aktionen live.',
             action: h('a', { class: 'btn primary', href: '#/spiel/neu' }, 'Erstes Spiel anlegen'),

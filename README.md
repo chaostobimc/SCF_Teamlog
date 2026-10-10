@@ -32,7 +32,7 @@ Funktionen der Web-Version:
 - **Live-Erfassung**: Spieluhr mit Anpfiff/Pause, ±10 s / ±1 min, exakte
   Zeitvorgabe per Klick auf die Uhr, Halbzeitwechsel, Auszeit, Spielende,
   Undo. Anzeige laufender 2-Minuten-Strafen mit Countdown. Spielfeld mit
-  Wurfzonen, Tor-Raster mit Trefferzonen, Gegner-Nummernfeld mit Zifferblock.
+  Wurfzonen, Tor-Raster mit Trefferzonen, Gegner-Trikotnummer frei eingeben (1–99) mit Schnellwahl der zuletzt genutzten Nummern.
   Auf dem Handy umschaltbar zwischen „Ziel & Feld“ und „Aktionen“.
   Tastatur: Leertaste Start/Pause, Z Undo, Esc abbrechen, Trikotnummer
   tippen (Ziffern wählen die Nummer), T Tor, G gehalten/Parade, B Ballverlust,

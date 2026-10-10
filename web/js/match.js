@@ -294,7 +294,8 @@ export class LiveSession {
   }
 
   setOpponentNumber(number) {
-    this.opponentNumber = number || null;
+    const n = Number.parseInt(number, 10);
+    this.opponentNumber = Number.isInteger(n) && n >= 1 && n <= 99 ? n : null;
     this._emit();
   }
 

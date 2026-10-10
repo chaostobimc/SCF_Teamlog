@@ -278,11 +278,11 @@ function buildOverview(store, match, navigate, rerender) {
   );
 
   const kpis = h('section', { class: 'kpi-grid' },
-    statCard({ label: 'Feldtore', value: `${total.fieldGoals}/${total.fieldShots}`, sub: `Quote ${fmtPct(derived(stats.total).fieldShotRatio)}`, tone: 'accent', icon: '🎯' }),
-    statCard({ label: '7-Meter', value: `${total.goalsSevenMeter}/${total.shotsSevenMeter}`, sub: `Quote ${fmtPct(total.sevenMeterRatio)}`, tone: 'violet', icon: '7️⃣' }),
-    statCard({ label: 'Paraden', value: `${keeperTotal(match).saves}`, sub: `Quote ${fmtPct(keeperTotal(match).saveRatio)}`, tone: 'cyan', icon: '🧤' }),
-    statCard({ label: 'Fehler', value: `${total.ballLosses + total.technicalErrors}`, sub: `${total.ballLosses} BV · ${total.technicalErrors} Technik`, tone: 'warn', icon: '⚠️' }),
-    statCard({ label: 'Strafen', value: `${total.sanctions}`, sub: `${total.twoMinutes} × 2 min · ${total.yellowCards} Gelb`, icon: '⏱' }),
+    statCard({ label: 'Feldtore', value: `${total.fieldGoals}/${total.fieldShots}`, sub: `Quote ${fmtPct(derived(stats.total).fieldShotRatio)}`, tone: 'accent' }),
+    statCard({ label: '7-Meter', value: `${total.goalsSevenMeter}/${total.shotsSevenMeter}`, sub: `Quote ${fmtPct(total.sevenMeterRatio)}`, tone: 'violet' }),
+    statCard({ label: 'Paraden', value: `${keeperTotal(match).saves}`, sub: `Quote ${fmtPct(keeperTotal(match).saveRatio)}`, tone: 'cyan' }),
+    statCard({ label: 'Fehler', value: `${total.ballLosses + total.technicalErrors}`, sub: `${total.ballLosses} BV · ${total.technicalErrors} Technik`, tone: 'warn' }),
+    statCard({ label: 'Strafen', value: `${total.sanctions}`, sub: `${total.twoMinutes} × 2 min · ${total.yellowCards} Gelb` }),
   );
 
   // Spielertabelle
@@ -319,7 +319,7 @@ function buildOverview(store, match, navigate, rerender) {
   ];
   const playersTable = rows.length
     ? dataTable({ columns: tableColumns, rows, sortKey: 'goals', sortDir: 'desc', footer, caption: 'Spielertabelle' })
-    : emptyState({ icon: '📋', title: 'Keine Spieler im Aufgebot', text: 'Im Spiel-Bearbeiten-Dialog Spieler ins Aufgebot nehmen.' });
+    : emptyState({ title: 'Keine Spieler im Aufgebot', text: 'Im Spiel-Bearbeiten-Dialog Spieler ins Aufgebot nehmen.' });
 
   // Torzonen (Schuetze): Tore/Paraden aus den Zonen-Tallies, Fehlwuerfe in Daneben-Zonen
   const zoneTallies = { ...stats.zones };

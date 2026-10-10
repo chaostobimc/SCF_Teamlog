@@ -16,25 +16,25 @@ import { emptyState, statusPill } from '../components.js';
 import { h, openDialog, setChildren, toast } from '../ui.js';
 
 const QUICK_FIELD = [
-  ['tor', 'Tor', '🥅', 'good'],
-  ['fehlwurf', 'Fehlwurf', '✖', 'warn'],
-  ['wurfGeblockt', 'Geblockt', '🧱', 'warn'],
-  ['ballverlust', 'Ballverlust', '🔄', 'bad'],
-  ['schrittfehler', 'Schritt', '👣', 'warn'],
-  ['prellfehler', 'Prellen', '⤵', 'warn'],
-  ['gefoult', 'Gefoult', '🖐', 'cyan'],
-  ['siebenMeterHerausgeholt', '7m geholt', '🎯', 'good'],
-  ['duelGewonnen', 'Duell gew.', '💪', 'violet'],
-  ['stuermerfoul', 'Stürmerfoul', '⚠', 'warn'],
-  ['gelbeKarte', 'Gelb', '🟨', 'warn'],
-  ['zeitstrafe', '2 min', '⏱', 'warn'],
-  ['roteKarte', 'Rot', '🟥', 'bad'],
-  ['blaueKarte', 'Blau', '🟦', 'cyan'],
+  ['tor', 'Tor', '', 'good'],
+  ['fehlwurf', 'Fehlwurf', '', 'warn'],
+  ['wurfGeblockt', 'Geblockt', '', 'warn'],
+  ['ballverlust', 'Ballverlust', '', 'bad'],
+  ['schrittfehler', 'Schritt', '', 'warn'],
+  ['prellfehler', 'Prellen', '', 'warn'],
+  ['gefoult', 'Gefoult', '', 'cyan'],
+  ['siebenMeterHerausgeholt', '7m geholt', '', 'good'],
+  ['duelGewonnen', 'Duell gew.', '', 'violet'],
+  ['stuermerfoul', 'Stürmerfoul', '', 'warn'],
+  ['gelbeKarte', 'Gelb', '', 'warn'],
+  ['zeitstrafe', '2 min', '', 'warn'],
+  ['roteKarte', 'Rot', '', 'bad'],
+  ['blaueKarte', 'Blau', '', 'cyan'],
 ];
 
 const QUICK_KEEPER_OPP = [
-  ['fehlwurf', 'Fehlwurf', '✖', 'cyan'],
-  ['wurfGeblockt', 'Block', '🧱', 'cyan'],
+  ['fehlwurf', 'Fehlwurf', '', 'cyan'],
+  ['wurfGeblockt', 'Block', '', 'cyan'],
 ];
 
 const SQUAD_NUMBER_TIMEOUT = 600;
@@ -331,17 +331,33 @@ export function renderLive({ store, navigate, params }) {
 
   function opponentNumberBar() {
     const sel = session.opponentNumber;
+    const recent = recentOpponentNumbers(session.match).filter((n) => n !== sel).slice(0, 8);
+    const input = h('input', {
+      class: 'input opp-input',
+      type: 'number',
+      inputmode: 'numeric',
+      min: '1',
+      max: '99',
+      placeholder: 'Nr.',
+      value: sel ?? '',
+      'aria-label': 'Trikotnummer Gegner',
+      onkeydown: (e) => { if (e.key === 'Enter') e.currentTarget.blur(); },
+      onchange: (e) => session.setOpponentNumber(parseOpponentNumber(e.currentTarget.value)),
+    });
     return h('div', { class: 'opp-bar' },
-      h('div', { class: 'opp-head' },
-        h('span', { class: 'panel-label' }, 'Gegner-Nummer'),
-        sel ? h('span', { class: 'tag tag-cyan' }, `#${sel}`) : null,
-        h('span', { class: 'spacer' }),
-        h('button', { class: 'icon-btn small', type: 'button', title: 'Zifferblock', onclick: openKeypad }, '#'),
+      h('div', { class: 'opp-row' },
+        h('span', { class: 'opp-label' }, 'Gegner'),
+        input,
+        sel ? h('button', { class: 'link-btn', type: 'button', onclick: () => session.setOpponentNumber(null) }, 'leeren') : null,
       ),
-      h('div', { class: 'opp-chips' },
-        Array.from({ length: 20 }, (_, i) => i + 1).map((n) => h('button', {
-          type: 'button', class: `opp-chip ${sel === n ? 'is-selected' : ''}`, onclick: () => session.setOpponentNumber(n),
-        }, String(n)))),
+      recent.length
+        ? h('div', { class: 'opp-chips' }, recent.map((n) => h('button', {
+          type: 'button', class: 'opp-chip', onclick: () => session.setOpponentNumber(n),
+        }, String(n))))
+        : null,
+      h('p', { class: 'hint-line small' }, sel
+        ? `Gegner #${sel}: wohin geworfen? Ziel im Tor antippen.`
+        : 'Trikotnummer eingeben (1–99), dann Ziel im Tor antippen.'),
     );
   }
 
@@ -350,8 +366,9 @@ export function renderLive({ store, navigate, params }) {
       ? [['tor', 'Gegentor', 'tile-bad'], ['wurfGehalten', 'Parade', 'tile-good']]
       : [['tor', 'Tor', 'tile-good'], ['wurfGehalten', 'Gehalten', 'tile-bad'], ['wurfGeblockt', 'Block', 'tile-warn']];
     const ctxLabel = pending.isSevenMeter ? ' · 7-Meter' : (pending.isFreeThrow ? ' · Freiwurf' : '');
+    const oppLabel = isKeeper && session.opponentNumber ? `Gegner #${session.opponentNumber} · ` : '';
     return h('div', { class: 'action-group' },
-      h('div', { class: 'panel-label' }, `Wurfziel: ${GOAL_ZONE_LABELS[pending.goalZone]}${ctxLabel}`),
+      h('div', { class: 'panel-label' }, `${oppLabel}Wurfziel: ${GOAL_ZONE_LABELS[pending.goalZone]}${ctxLabel}`),
       h('div', { class: 'tile-grid three' },
         outcomes.map(([type, label, cls]) => h('button', {
           type: 'button', class: `tile big ${cls}`, onclick: () => session.resolvePendingShot(type),
@@ -372,9 +389,9 @@ export function renderLive({ store, navigate, params }) {
         h('div', { class: 'tile-grid three' },
           QUICK_KEEPER_OPP.map(([type, label, icon, tone]) => h('button', {
             type: 'button', class: `tile tone-${tone}`, onclick: () => session.commitOpponentAction(type),
-          }, h('span', { class: 'tile-icon' }, icon), h('span', {}, label))),
+          }, icon ? h('span', { class: 'tile-icon' }, icon) : null, h('span', {}, label))),
           h('button', { type: 'button', class: 'tile tone-muted', onclick: () => session.timeout() },
-            h('span', { class: 'tile-icon' }, '⏸'), h('span', {}, 'Auszeit')),
+            h('span', {}, 'Auszeit')),
         ),
         h('p', { class: 'hint-line small' }, 'Wurfart (Feld / 7m / Freiwurf) wählen – gilt für Gegner-Fehlwurf und Block.'),
         h('div', { class: 'segmented wide' },
@@ -388,7 +405,7 @@ export function renderLive({ store, navigate, params }) {
       h('div', { class: 'tile-grid three' },
         QUICK_FIELD.map(([type, label, icon, tone]) => h('button', {
           type: 'button', class: `tile tone-${tone}`, onclick: () => session.commitQuickAction(type),
-        }, h('span', { class: 'tile-icon' }, icon), h('span', {}, label)))),
+        }, icon ? h('span', { class: 'tile-icon' }, icon) : null, h('span', {}, label)))),
       h('div', { class: 'panel-label' }, 'Wurfart für Tor-Tipp'),
       h('div', { class: 'segmented wide' },
         seg('Feld', !['siebenMeter', 'freiwurf'].includes(session.lastCourtZone), () => session.setQuickContext(null)),
@@ -436,39 +453,6 @@ export function renderLive({ store, navigate, params }) {
         const parsed = parseClock(input.value);
         if (parsed === null) { err.textContent = 'Bitte im Format mm:ss eingeben.'; return false; }
         session.setPeriodClock(parsed);
-        return true;
-      },
-    });
-  }
-
-  function openKeypad() {
-    let buffer = '';
-    const display = h('div', { class: 'keypad-display' }, '–');
-    const press = (key) => {
-      if (key === '←') buffer = buffer.slice(0, -1);
-      else if (buffer.length < 2) buffer += key;
-      display.textContent = buffer || '–';
-    };
-    const keypad = h('div', { class: 'keypad' },
-      ['1', '2', '3', '4', '5', '6', '7', '8', '9', '←', '0', 'OK'].map((k) => h('button', {
-        type: 'button', class: `key ${k === 'OK' ? 'key-ok' : ''}`,
-        onclick: (e) => {
-          if (k === 'OK') {
-            // Uebernahme laeuft ueber den Submit-Button des Dialogs.
-            e.currentTarget.closest('form')?.querySelector('button[type=submit]')?.click();
-            return;
-          }
-          press(k);
-        },
-      }, k)));
-    openDialog({
-      title: 'Gegner-Nummer',
-      submitLabel: 'Übernehmen',
-      body: h('div', { class: 'keypad-wrap' }, display, keypad),
-      onSubmit: () => {
-        const n = Number(buffer);
-        if (!(n > 0)) return false;
-        session.setOpponentNumber(n);
         return true;
       },
     });
@@ -591,3 +575,19 @@ function parseClock(value) {
   return min * 60 + sec;
 }
 
+
+/** Gegner-Trikotnummer: nur ganze Zahlen 1-99, sonst null. */
+function parseOpponentNumber(value) {
+  const n = Number.parseInt(String(value).trim(), 10);
+  return Number.isInteger(n) && n >= 1 && n <= 99 ? n : null;
+}
+
+/** Zuletzt benutzte Gegner-Nummern, neueste zuerst, ohne Doppelte. */
+function recentOpponentNumbers(match) {
+  const seen = [];
+  for (let i = match.events.length - 1; i >= 0; i--) {
+    const e = match.events[i];
+    if (e.isOpponent && e.opponentNumber && !seen.includes(e.opponentNumber)) seen.push(e.opponentNumber);
+  }
+  return seen;
+}

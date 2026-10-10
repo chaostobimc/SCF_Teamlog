@@ -1,5 +1,5 @@
 // Service Worker: macht die App offline nutzbar (Cache-first fuer die eigenen Dateien).
-const CACHE = 'scf-teamlog-v2';
+const CACHE = 'scf-teamlog-v3';
 const ASSETS = [
   './',
   './index.html',
