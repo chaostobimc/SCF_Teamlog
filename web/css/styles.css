@@ -74,7 +74,6 @@ button { cursor: pointer; }
 .nav-ico { display: none; }
 .topbar-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
 
-.logo-badge { width: 36px; height: 36px; border-radius: var(--radius-sm); flex: none; display: inline-flex; align-items: center; justify-content: center; background: var(--accent); color: #fff; font-weight: 700; font-size: 14px; }
 .logo-sm { width: 30px; height: 30px; font-size: 12px; }
 .logo-img { display: block; width: 36px; height: 36px; object-fit: contain; flex: none; }
 .logo-img.logo-sm { width: 34px; height: 34px; }

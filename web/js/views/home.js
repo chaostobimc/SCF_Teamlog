@@ -27,7 +27,7 @@ export function renderHome({ store }) {
     h('div', { class: 'hero-glow', 'aria-hidden': 'true' }),
     h('div', { class: 'hero-inner' },
       h('div', { class: 'hero-brand' },
-        h('img', { class: 'logo-img hero-logo', src: 'img/logo.svg', alt: 'SC Freising Logo' }),
+        h('img', { class: 'logo-img hero-logo', src: 'img/logo.png', alt: 'SC Freising Logo' }),
         h('div', {},
           h('h1', { class: 'hero-title' }, 'SCF Teamlog'),
         ),
