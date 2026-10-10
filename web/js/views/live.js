@@ -356,8 +356,8 @@ export function renderLive({ store, navigate, params }) {
         }, String(n))))
         : null,
       h('p', { class: 'hint-line small' }, sel
-        ? `Gegner #${sel}: wohin geworfen? Ziel im Tor antippen.`
-        : 'Trikotnummer eingeben (1–99), dann Ziel im Tor antippen.'),
+        ? `Gegner #${sel}: Wurfposition im Feld antippen (optional), dann Ziel im Tor.`
+        : 'Trikotnummer eingeben (1–99), dann Wurfposition im Feld und Ziel im Tor antippen.'),
     );
   }
 
@@ -367,8 +367,9 @@ export function renderLive({ store, navigate, params }) {
       : [['tor', 'Tor', 'tile-good'], ['wurfGehalten', 'Gehalten', 'tile-bad'], ['wurfGeblockt', 'Block', 'tile-warn']];
     const ctxLabel = pending.isSevenMeter ? ' · 7-Meter' : (pending.isFreeThrow ? ' · Freiwurf' : '');
     const oppLabel = isKeeper && session.opponentNumber ? `Gegner #${session.opponentNumber} · ` : '';
+    const fromLabel = isKeeper && pending.courtZone ? `Von: ${COURT_ZONE_LABELS[pending.courtZone]} · ` : '';
     return h('div', { class: 'action-group' },
-      h('div', { class: 'panel-label' }, `${oppLabel}Wurfziel: ${GOAL_ZONE_LABELS[pending.goalZone]}${ctxLabel}`),
+      h('div', { class: 'panel-label' }, `${oppLabel}${fromLabel}Ziel: ${GOAL_ZONE_LABELS[pending.goalZone]}${ctxLabel}`),
       h('div', { class: 'tile-grid three' },
         outcomes.map(([type, label, cls]) => h('button', {
           type: 'button', class: `tile big ${cls}`, onclick: () => session.resolvePendingShot(type),

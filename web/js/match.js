@@ -280,6 +280,8 @@ export class LiveSession {
       return;
     }
     this.lastCourtZone = zone;
+    // Laufender Wurf (z. B. Tor schon angetippt): Wurfposition nachtraeglich korrigieren.
+    if (this.pendingShot) this.pendingShot = { ...this.pendingShot, courtZone: zone };
     this._emit();
   }
 
