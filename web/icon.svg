@@ -1,6 +1,4 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="72" fill="#1f4d3b"/>
-  <rect x="34" y="34" width="444" height="444" rx="46" fill="none" stroke="#efebe1" stroke-width="6" opacity=".35"/>
-  <path d="M104 344 A170 170 0 0 1 408 344" fill="none" stroke="#efebe1" stroke-width="10" opacity=".7"/>
-  <text x="256" y="300" font-family="Iowan Old Style, Palatino, Georgia, serif" font-size="150" font-weight="700" fill="#efebe1" text-anchor="middle">SCF</text>
+  <rect width="512" height="512" rx="72" fill="#2563eb"/>
+  <text x="256" y="300" font-family="system-ui, Segoe UI, Arial, sans-serif" font-size="150" font-weight="700" fill="#ffffff" text-anchor="middle">SCF</text>
 </svg>
