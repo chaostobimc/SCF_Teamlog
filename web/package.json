@@ -1,0 +1,12 @@
+{
+  "name": "scf-teamlog-web",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SCF Teamlog – Handball-Live-Statistik als Web-App (statische Seite, kein Build nötig)",
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/logic.test.js",
+    "start": "python3 -m http.server 8080 --bind 0.0.0.0"
+  },
+  "license": "UNLICENSED"
+}

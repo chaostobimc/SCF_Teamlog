@@ -1,0 +1,18 @@
+{
+  "name": "SCF Teamlog – Handball-Live-Statistik",
+  "short_name": "SCF Teamlog",
+  "description": "Live-Statistik für den SC Freising: Spiele erfassen, Kader verwalten, Auswertungen. Offline nutzbar.",
+  "id": "./",
+  "start_url": "./#/",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#060A10",
+  "theme_color": "#060A10",
+  "lang": "de",
+  "categories": ["sports", "productivity"],
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}

@@ -6,6 +6,48 @@ schnell, offline, ohne Ballast. Die App ist fest auf eine Mannschaft
 ausgelegt – ohne Team-Verwaltung, dafür mit Kader, Aufgebot und
 Gegner-Scouting.
 
+## Web-Version (Browser, PWA)
+
+Neben der Flutter-App gibt es eine eigenständige **Web-App** im Ordner
+`web/` – reines HTML/CSS/JavaScript, ohne Build-Schritt und ohne Abhängigkeiten.
+Sie läuft in jedem modernen Browser, lässt sich auf dem Handy als App
+installieren (PWA) und funktioniert danach offline.
+
+```bash
+cd web
+npm start          # http://localhost:8080 (python3 -m http.server)
+npm test           # Logik-Tests (Uhr, Torwart-Mapping, Statistik, Sicherung)
+```
+
+Veröffentlichen geht mit jedem statischen Hosting (z. B. GitHub Pages, Netlify):
+den Ordner `web/` ausliefern. HTTPS ist nötig, damit der Offline-Modus
+(Service Worker) greift.
+
+Funktionen der Web-Version:
+
+- **Start** mit Saisonbilanz (Siege/Unentschieden/Niederlagen, Tore), laufendem
+  Spiel, Filter und Suche in der Spielliste.
+- **Kader**: anlegen, bearbeiten, löschen; Filter nach Position; Prüfung auf
+  doppelte Trikotnummern; CSV-Export.
+- **Live-Erfassung**: Spieluhr mit Anpfiff/Pause, ±10 s / ±1 min, exakte
+  Zeitvorgabe per Klick auf die Uhr, Halbzeitwechsel, Auszeit, Spielende,
+  Undo. Anzeige laufender 2-Minuten-Strafen mit Countdown. Spielfeld mit
+  Wurfzonen, Tor-Raster mit Trefferzonen, Gegner-Nummernfeld mit Zifferblock.
+  Auf dem Handy umschaltbar zwischen „Ziel & Feld“ und „Aktionen“.
+  Tastatur: Leertaste Start/Pause, Z Undo, Esc abbrechen, Trikotnummer
+  tippen (Ziffern wählen die Nummer), T Tor, G gehalten/Parade, B Ballverlust,
+  F Fehlwurf. Bildschirm bleibt während des Spiels an (sofern unterstützt).
+- **Auswertung je Spiel**: Ergebnis, Spielertabelle (sortierbar), Torzonen,
+  Wurfbild Feld, Wurfbild Torwart, gegnerische Werfer, Chronik mit Löschen
+  und Rückgängig. Export als CSV oder Drucken/PDF.
+- **Statistik über alle Spiele** mit Detailseite je Spieler und Verlaufsdiagramm.
+- **Daten**: Sicherung als JSON herunterladen und wiederherstellen, Übersichten
+  als CSV, Alle-Daten-Löschen mit Bestätigung. Alle Daten bleiben im Browser
+  (localStorage).
+
+Die Web-Version ist unabhängig von der Flutter-App: Daten lassen sich dort
+nicht direkt übernehmen. Zum Übertragen eine Sicherung als JSON nutzen.
+
 ## Ersteinrichtung
 
 Das Repository enthält den kompletten Dart-/Flutter-Quellcode. Die
