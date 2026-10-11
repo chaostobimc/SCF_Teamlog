@@ -1,5 +1,5 @@
-// Service Worker: macht die App offline nutzbar (Cache-first fuer die eigenen Dateien).
-const CACHE = 'scf-teamlog-v8';
+// Service Worker: offline nutzbar. Network-first, damit keine alten Dateien haengen bleiben.
+const CACHE = 'scf-teamlog-v9';
 const ASSETS = [
   './',
   './index.html',
@@ -45,18 +45,16 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
 
+  // Network-first: frische Dateien zuerst, Cache nur als Offline-Fallback.
   event.respondWith(
-    caches.match(req, { ignoreSearch: true }).then((cached) => {
-      const network = fetch(req)
-        .then((res) => {
-          if (res && res.ok) {
-            const copy = res.clone();
-            caches.open(CACHE).then((cache) => cache.put(req, copy));
-          }
-          return res;
-        })
-        .catch(() => cached);
-      return cached || network;
-    }),
+    fetch(req)
+      .then((res) => {
+        if (res && res.ok) {
+          const copy = res.clone();
+          caches.open(CACHE).then((cache) => cache.put(req, copy));
+        }
+        return res;
+      })
+      .catch(() => caches.match(req, { ignoreSearch: true })),
   );
 });
