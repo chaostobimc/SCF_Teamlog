@@ -604,3 +604,126 @@ select.input { appearance: auto; }
 /* Logo-Grauton: Akzente schwarz statt farbig */
 .topbar { border-bottom: 2px solid var(--text); }
 .hero-title { font-weight: 700; letter-spacing: -0.01em; }
+
+/* ---- Spielfeld und Tor (Turn 4) ---- */
+.court { border-radius: 6px; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.court-bg { fill: url(#court-turf); }
+.turf-base { fill: #e9ece9; }
+.turf-line { stroke: #d6dbd6; stroke-width: 1.2; }
+.court-line { stroke: #3d4a44; stroke-width: 2.2; opacity: .85; }
+.court-line.dashed { stroke-dasharray: 10 8; opacity: .55; }
+.zone-a { fill: rgba(255,255,255,.55); }
+.zone-b { fill: rgba(255,255,255,.12); }
+.zone-kreis { fill: rgba(60,120,200,.14); }
+.court-interactive .zone-sector:hover,
+.court-interactive .zone-kreis:hover { fill: rgba(60,120,200,.28); }
+.zone-sector.is-selected, .zone-kreis.is-selected { fill: rgba(40,100,190,.38); }
+.goal-net { fill: url(#court-net); stroke: none; }
+.net-line { stroke: #9aa59e; stroke-width: 1; }
+.goal-frame { stroke: #1f2a24; stroke-width: 4; stroke-linejoin: round; }
+.seven-dot { fill: #3d4a44; }
+.heat-label { font-size: 15px; font-weight: 700; fill: #1f2a24; paint-order: stroke; stroke: rgba(255,255,255,.85); stroke-width: 3px; }
+.marker { stroke: #fff; stroke-width: 2; filter: drop-shadow(0 1px 1.5px rgba(0,0,0,.35)); }
+.marker-goal { fill: #1f9d55; }
+.marker-saved { fill: #2563eb; }
+.marker-miss { fill: #7b8590; }
+.marker-block { fill: #e09a1a; }
+.marker-seven { fill: #7c3aed; }
+
+.goal-grid {
+  padding: 10px; border-radius: 8px; background: #1f2a24;
+  background-image: repeating-linear-gradient(45deg, rgba(255,255,255,.035) 0 2px, transparent 2px 9px);
+  grid-template-columns: 74px repeat(3, 1fr) 74px; gap: 5px;
+}
+.goal-cell {
+  border: 0; border-radius: 4px;
+  background: #3a4a42;
+  box-shadow: inset 0 -2px 0 rgba(0,0,0,.2);
+}
+.goal-cell .goal-cell-name { color: #d7e0da; }
+.goal-cell .goal-cell-count { color: #fff; }
+.goal-cell.inner {
+  background: color-mix(in srgb, #2563eb calc(var(--heat, 0) * 70%), #f4f6f4);
+}
+.goal-cell.inner .goal-cell-name { color: #33413a; }
+.goal-cell.inner .goal-cell-count { color: #1a2420; }
+.goal-cell.inner.is-good { box-shadow: inset 0 3px 0 #1f9d55; }
+.goal-cell.side { background: #2b3830; }
+.goal-cell[data-zone="drueber"] { background: #2b3830; }
+.goal-cell.is-selected, .goal-cell.is-selected.inner { background: #2563eb; }
+.goal-cell.is-selected .goal-cell-name, .goal-cell.is-selected .goal-cell-count { color: #fff; }
+.goal-cell:hover:not(:disabled) { border-color: transparent; filter: brightness(1.08); }
+
+/* ---- Gegner ---- */
+.team-list { display: grid; gap: 8px; margin-top: 12px; }
+.team-row {
+  display: grid; grid-template-columns: 1fr auto; grid-template-areas: "name date" "meta meta";
+  gap: 2px 12px; text-align: left; padding: 12px 14px; width: 100%;
+  background: var(--card); border: 1px solid var(--line-soft); border-radius: var(--radius); cursor: pointer; font: inherit; color: inherit;
+}
+.team-row:hover { border-color: var(--accent); }
+.team-row-name { grid-area: name; font-weight: 600; font-size: 16px; }
+.team-row-date { grid-area: date; align-self: center; }
+.team-row-meta { grid-area: meta; }
+.card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.card-head h2 { margin: 0; }
+.shooter-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
+.shooter-card { border: 1px solid var(--line-soft); border-radius: var(--radius); padding: 12px; background: var(--card); display: grid; gap: 10px; }
+.shooter-head { display: flex; align-items: center; gap: 10px; }
+.shooter-number {
+  display: inline-grid; place-items: center; min-width: 40px; height: 40px; padding: 0 8px; border-radius: 6px;
+  background: var(--accent); color: #fff; font-weight: 700; font-size: 18px; font-variant-numeric: tabular-nums;
+}
+.shooter-title { display: grid; gap: 2px; }
+.shooter-maps { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; align-items: start; }
+.shooter-maps figure { margin: 0; display: grid; gap: 4px; }
+.shooter-maps figcaption { font-size: 12px; }
+.shooter-card .court { width: 100%; }
+.shooter-card .goal-grid { max-width: none; grid-template-columns: 40px repeat(3, 1fr) 40px; gap: 3px; padding: 6px; }
+.shooter-card .goal-cell-name { font-size: 9px; }
+.shooter-card .goal-cell-count { font-size: 12px; }
+.shot-legend { display: flex; flex-wrap: wrap; gap: 10px; }
+.legend-item { display: inline-flex; align-items: center; gap: 5px; }
+.legend-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; border: 1px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.15); }
+.search { width: 100%; max-width: 360px; }
+.toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+@media (max-width: 560px) {
+  .shooter-grid { grid-template-columns: 1fr; }
+  .shooter-maps { grid-template-columns: 1fr; }
+}
+
+/* ---- Hintergruende (Auswahl in der Daten-Ansicht, Standard = keine Regel) ---- */
+html[data-bg="feldlinien"] body {
+  background-color: #e6ebe7;
+  background-image:
+    linear-gradient(rgba(31,42,36,.08) 2px, transparent 2px),
+    linear-gradient(90deg, rgba(31,42,36,.08) 2px, transparent 2px);
+  background-size: 120px 120px;
+  background-position: -1px -1px;
+  background-attachment: fixed;
+}
+html[data-bg="netz"] body {
+  background-color: #eef1ee;
+  background-image: repeating-linear-gradient(45deg, rgba(31,42,36,.07) 0 1.5px, transparent 1.5px 14px),
+    repeating-linear-gradient(-45deg, rgba(31,42,36,.07) 0 1.5px, transparent 1.5px 14px);
+  background-attachment: fixed;
+}
+html[data-bg="verlauf"] body {
+  background: linear-gradient(180deg, #dfe7f3 0%, #f1f4f9 46%, #f1f1f1 100%) fixed;
+}
+
+/* ---- Feinschliff Gegner-Karten ---- */
+.legend-dot.marker-goal { background: #1f9d55; }
+.legend-dot.marker-saved { background: #2563eb; }
+.legend-dot.marker-miss { background: #7b8590; }
+.legend-dot.marker-block { background: #e09a1a; }
+.shooter-grid { grid-template-columns: repeat(auto-fill, minmax(430px, 1fr)); }
+.shooter-maps { grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); }
+.shooter-card .goal-grid { grid-template-columns: 64px repeat(3, 1fr) 64px; grid-template-rows: 44px 58px 58px; }
+.shooter-card .goal-cell.inner .goal-cell-name { display: none; }
+.shooter-card .goal-cell-name { font-size: 10.5px; }
+.shooter-card .goal-cell-count { font-size: 15px; }
+@media (max-width: 560px) {
+  .shooter-grid { grid-template-columns: 1fr; }
+  .shooter-maps { grid-template-columns: 1fr; }
+}

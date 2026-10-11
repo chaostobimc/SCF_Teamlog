@@ -1,10 +1,10 @@
 // Service Worker: macht die App offline nutzbar (Cache-first fuer die eigenen Dateien).
-const CACHE = 'scf-teamlog-v7';
+const CACHE = 'scf-teamlog-v8';
 const ASSETS = [
   './',
   './index.html',
-  './css/styles.css',
-  './js/app.js',
+  './css/styles.css?v=8',
+  './js/app.js?v=8',
   './js/model.js',
   './js/stats.js',
   './js/match.js',
@@ -17,11 +17,14 @@ const ASSETS = [
   './js/views/live.js',
   './js/views/stats.js',
   './js/views/data.js',
+  './js/views/opponents.js',
+  './js/opponents-data.js',
+  './js/background.js',
   './manifest.webmanifest',
-  './img/logo.png',
-  './img/icon-192.png',
-  './img/icon-512.png',
-  './img/apple-touch-icon.png',
+  './img/logo.png?v=8',
+  './img/icon-192.png?v=8',
+  './img/icon-512.png?v=8',
+  './img/apple-touch-icon.png?v=8',
 ];
 
 self.addEventListener('install', (event) => {

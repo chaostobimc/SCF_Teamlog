@@ -7,8 +7,11 @@ import { renderSetup, renderOverview } from './views/match.js';
 import { renderLive } from './views/live.js';
 import { renderStats, renderPlayerDetail } from './views/stats.js';
 import { renderData } from './views/data.js';
+import { renderOpponents, renderOpponentTeam } from './views/opponents.js';
+import { applyBackground } from './background.js';
 
 const store = new Store(globalThis.localStorage);
+applyBackground();
 const main = document.getElementById('app');
 const nav = document.getElementById('main-nav');
 
@@ -18,6 +21,8 @@ const ROUTES = [
   { pattern: /^\/spiel\/neu\/?$/, view: renderSetup, section: 'home', title: 'Neues Spiel' },
   { pattern: /^\/spiel\/([^/]+)\/live\/?$/, view: renderLive, section: 'home', title: 'Live' },
   { pattern: /^\/spiel\/([^/]+)\/?$/, view: renderOverview, section: 'home', title: 'Spiel' },
+  { pattern: /^\/gegner\/?$/, view: renderOpponents, section: 'opponents', title: 'Gegner' },
+  { pattern: /^\/gegner\/([^/]+)\/?$/, view: renderOpponentTeam, section: 'opponents', title: 'Gegner' },
   { pattern: /^\/statistik\/?$/, view: renderStats, section: 'stats', title: 'Statistik' },
   { pattern: /^\/statistik\/([^/]+)\/?$/, view: renderPlayerDetail, section: 'stats', title: 'Spielerstatistik' },
   { pattern: /^\/daten\/?$/, view: renderData, section: 'data', title: 'Daten' },

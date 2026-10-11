@@ -3,6 +3,7 @@ import { dateLabel, EVENT_TYPES, PHASE_LABELS, SCF_TEAM_NAME } from '../model.js
 import { resultOf, scoreOf } from '../stats.js';
 import { pageHead, statCard } from '../components.js';
 import { confirmDialog, csvPercent, downloadFile, h, openDialog, toast, toCsv } from '../ui.js';
+import { BACKGROUNDS, getBackground, setBackground } from '../background.js';
 
 export function renderData({ store, navigate }) {
   const matches = store.matchesSorted();
@@ -37,6 +38,11 @@ export function renderData({ store, navigate }) {
       toast(error.message);
     }
   });
+
+  const bgSelect = h('select', {
+    class: 'input', 'aria-label': 'Hintergrund auswählen',
+    onchange: (e) => { setBackground(e.target.value); toast('Hintergrund geändert'); },
+  }, BACKGROUNDS.map((b) => h('option', { value: b.id, selected: b.id === getBackground() }, b.label)));
 
   const backupBtn = h('button', {
     class: 'btn primary', type: 'button', onclick: () => {
@@ -118,6 +124,11 @@ export function renderData({ store, navigate }) {
       statCard({ label: 'Spiele', value: matches.length }),
       statCard({ label: 'Kader', value: playerCount, tone: 'cyan' }),
       statCard({ label: 'Speicher', value: `${Math.max(1, Math.round(bytes / 1024))} KB`, sub: 'lokal im Browser', tone: 'violet' }),
+    ),
+    h('section', { class: 'card' },
+      h('div', { class: 'card-head' }, h('h2', {}, 'Darstellung')),
+      h('p', { class: 'muted' }, 'Hintergrund der Oberfläche. Die Auswahl gilt nur in diesem Browser.'),
+      h('div', { class: 'btn-row' }, bgSelect),
     ),
     h('section', { class: 'card' },
       h('div', { class: 'card-head' }, h('h2', {}, 'Sicherung')),

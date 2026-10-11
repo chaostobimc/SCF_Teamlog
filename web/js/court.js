@@ -101,6 +101,7 @@ export function courtSvg({ selected = null, onZone = null, markers = [], heat = 
     preserveAspectRatio: 'xMidYMid meet',
   });
 
+  root.append(courtDefs());
   root.append(svg('rect', { x: 0, y: 0, width: W, height: H, class: 'court-bg' }));
 
   // Sektoren (Zonen ausserhalb des Kreises)
@@ -134,6 +135,7 @@ export function courtSvg({ selected = null, onZone = null, markers = [], heat = 
   // Seitenlinien und Torlinie
   root.append(svg('path', { d: `M1 0 V${H} M${W - 1} 0 V${H} M0 ${H - 1} H${W}`, class: 'court-line thin', fill: 'none' }));
   // Tor
+  root.append(svg('rect', { x: GC.x - 44, y: -4, width: 88, height: 12, rx: 2, class: 'goal-net', fill: 'url(#court-net)' }));
   root.append(svg('rect', { x: GC.x - 44, y: -4, width: 88, height: 12, rx: 2, class: 'goal-frame' }));
   // 7-m-Punkt
   root.append(svg('circle', { cx: SEVEN.x, cy: SEVEN.y, r: 3.5, class: 'seven-dot' }));
@@ -155,7 +157,7 @@ export function courtSvg({ selected = null, onZone = null, markers = [], heat = 
     const jx = (seed % 9) - 4;
     const jy = ((seed >> 4) % 7) - 3;
     const cls = `marker marker-${m.kind}`;
-    root.append(svg('circle', { cx: c.x + jx, cy: c.y + jy, r: 6, class: cls }));
+    root.append(svg('circle', { cx: c.x + jx, cy: c.y + jy, r: 7, class: cls }));
   }
 
   if (onZone && interactive) {
@@ -166,6 +168,19 @@ export function courtSvg({ selected = null, onZone = null, markers = [], heat = 
     });
   }
   return root;
+}
+
+/** SVG-Muster fuer Spielfeld (Parkett-Schraffur) und Tornetz. */
+function courtDefs() {
+  return svg('defs', {},
+    svg('pattern', { id: 'court-turf', width: 9, height: 9, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(35)' },
+      svg('rect', { x: 0, y: 0, width: 9, height: 9, class: 'turf-base' }),
+      svg('line', { x1: 0, y1: 0, x2: 0, y2: 9, class: 'turf-line' }),
+    ),
+    svg('pattern', { id: 'court-net', width: 8, height: 8, patternUnits: 'userSpaceOnUse' },
+      svg('path', { d: 'M0 0 L8 8 M8 0 L0 8', class: 'net-line', fill: 'none' }),
+    ),
+  );
 }
 
 function toCourtPoint(root, e) {
@@ -198,10 +213,10 @@ export function goalGridEl({ selected = null, onZone, tallies = {}, mode = 'schu
       : '';
     return h('button', {
       type: 'button',
-      class: `goal-cell ${extraClass} ${selected === zone ? 'is-selected' : ''}`,
+      class: `goal-cell ${extraClass} ${selected === zone ? 'is-selected' : ''} ${good ? 'is-good' : ''}`,
       dataset: { zone },
       disabled,
-      style: { '--heat': total ? intensity.toFixed(2) : '0', '--good': good ? '1' : '0' },
+      style: `--heat: ${total ? intensity.toFixed(2) : '0'}`,
       onclick: () => onZone?.(zone),
       attrs: { 'aria-label': `${GOAL_ZONE_LABELS[zone]} ${label}`.trim(), title: GOAL_ZONE_LABELS[zone] },
     },
