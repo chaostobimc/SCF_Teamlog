@@ -23,7 +23,7 @@ export function renderOpponents({ store, navigate }) {
       emptyState({
         title: 'Noch keine Gegner',
         text: 'Lege ein Spiel mit Gegnernamen an, dann erscheinen die Mannschaften hier.',
-        action: h('a', { class: 'btn primary', href: '#/spiel/neu' }, 'Spiel anlegen'),
+        action: h('a', { class: 'btn primary', 'data-min-role': 'trainer', href: '#/spiel/neu' }, 'Spiel anlegen'),
       }),
     );
   }

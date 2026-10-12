@@ -263,7 +263,7 @@ function buildOverview(store, match, navigate, rerender) {
     resultText ? h('div', { class: 'match-hero-result' }, resultText) : null,
     h('div', { class: 'match-hero-actions' },
       h('a', { class: 'btn primary', href: `#/spiel/${match.id}/live` }, match.status === 'beendet' ? 'Ereignisse ansehen' : match.status === 'laufend' ? '● Live weiter' : '▶ Live starten'),
-      h('button', { class: 'btn ghost', type: 'button', onclick: () => editMatchDialog(store, match, rerender) }, 'Bearbeiten'),
+      h('button', { class: 'btn ghost', type: 'button', 'data-min-role': 'trainer', onclick: () => editMatchDialog(store, match, rerender) }, 'Bearbeiten'),
       h('button', { class: 'btn ghost', type: 'button', onclick: () => exportEventsCsv(match, team) }, 'CSV Ereignisse'),
       h('button', { class: 'btn ghost', type: 'button', onclick: () => exportPlayersCsv(match, team) }, 'CSV Spieler'),
       h('button', { class: 'btn ghost', type: 'button', onclick: () => window.print() }, 'PDF / Drucken'),
@@ -418,7 +418,7 @@ function buildOverview(store, match, navigate, rerender) {
                   e.goalZone && e.courtZone ? ' · ' : '',
                   e.courtZone ? `Feld: ${COURT_ZONE_LABELS[e.courtZone]}` : ''),
               ),
-              h('button', { class: 'icon-btn small', type: 'button', title: 'Ereignis löschen', 'aria-label': 'Ereignis löschen', onclick: () => deleteEvent(store, match, e, rerender) }, '✕'),
+              h('button', { class: 'icon-btn small', type: 'button', 'data-min-role': 'trainer', title: 'Ereignis löschen', 'aria-label': 'Ereignis löschen', onclick: () => deleteEvent(store, match, e, rerender) }, '✕'),
             );
           })),
   );

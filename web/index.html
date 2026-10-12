@@ -14,7 +14,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="css/styles.css?v=8">
 </head>
-<body>
+<body data-auth="out">
   <a class="skip-link" href="#app">Zum Inhalt springen</a>
 
   <header class="topbar no-print">
@@ -32,11 +32,15 @@
       <a href="#/gegner" data-section="opponents"><span>Gegner</span></a>
       <a href="#/statistik" data-section="stats"><span>Statistik</span></a>
       <a href="#/daten" data-section="data"><span>Daten</span></a>
+      <a href="#/admin" data-section="admin" data-min-role="admin"><span>Admin</span></a>
     </nav>
 
     <div class="topbar-actions">
       <button id="install-btn" class="btn ghost sm hidden" type="button">App installieren</button>
-      <a class="btn primary sm" href="#/spiel/neu">+ Neues Spiel</a>
+      <a class="btn primary sm" href="#/spiel/neu" data-min-role="trainer">+ Neues Spiel</a>
+      <span class="sync-status" id="sync-status" aria-live="polite"></span>
+      <a class="account-chip" id="account-chip" href="#/konto" aria-label="Konto"></a>
+      <button id="logout-btn" class="btn ghost sm hidden" type="button">Abmelden</button>
     </div>
   </header>
 

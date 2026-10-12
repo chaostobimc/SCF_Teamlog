@@ -15,7 +15,7 @@ installieren (PWA) und funktioniert danach offline.
 
 ```bash
 cd web
-npm start          # http://localhost:8080 (python3 -m http.server)
+npm start          # Server mit Datenbank + Web-App auf http://localhost:8080
 npm test           # Logik-Tests (Uhr, Torwart-Mapping, Statistik, Sicherung)
 ```
 
@@ -164,3 +164,37 @@ flutter test
 
 Covers Modelle, Match-Controller (Uhr, Phasen, Undo, Torhüter-Mapping),
 Statistik-Berechnung und die Zonen-Geometrie des Spielfelds.
+
+### Server, Konten und Synchronisation
+
+Die Web-Version braucht einen kleinen Server (`server/server.mjs`). Er liefert die App aus
+und speichert Konten und den Teamstand in einer SQLite-Datenbank. Es werden keine
+externen Pakete benötigt (Node.js 22 mit eingebautem `node:sqlite`).
+
+```bash
+node server/server.mjs                  # http://0.0.0.0:8080
+PORT=3000 SCF_DATA_DIR=/pfad node server/server.mjs
+```
+
+- Datenbank: `server/data/scf-teamlog.db` (Standard, nicht im Git). Die Datei nie committen.
+- Erster Aufruf: Ersteinrichtung. Dort legst du das erste Admin-Konto an.
+- Synchronisation: Geräte laden den Teamstand vom Server und senden Änderungen
+  automatisch. Gleichzeitige Änderungen werden pro Spiel zusammengeführt.
+
+**Rollen**
+
+| Rolle | Ansehen | Bearbeiten (Spiele, Kader, Live, Daten) | Konten, Passwörter, Datenbank |
+|---|---|---|---|
+| Spieler | ja | nein | nein |
+| Trainer | ja | ja | nein |
+| Admin | ja | ja | ja (Admin-Panel) |
+
+Die Rechte prüft der Server bei jeder Anfrage. Die Oberfläche blendet nur aus.
+Ein vom Admin zurückgesetztes Passwort muss beim nächsten Login geändert werden.
+
+**Tests:** `npm test` (Logik und Server, inkl. Rollen- und Sync-Tests).
+
+**Hinweis Betrieb:** Der Server muss irgendwo dauerhaft laufen (eigener Rechner, VPS oder Container),
+damit alle Geräte darauf zugreifen können. Die Datenbankdatei sollte regelmäßig gesichert werden
+(Admin-Panel → „Datenbank-Datei laden“).
+

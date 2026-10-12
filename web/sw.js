@@ -1,5 +1,5 @@
 // Service Worker: offline nutzbar. Network-first, damit keine alten Dateien haengen bleiben.
-const CACHE = 'scf-teamlog-v9';
+const CACHE = 'scf-teamlog-v10';
 const ASSETS = [
   './',
   './index.html',
@@ -17,6 +17,10 @@ const ASSETS = [
   './js/views/live.js',
   './js/views/stats.js',
   './js/views/data.js',
+  './js/views/auth.js',
+  './js/views/admin.js',
+  './js/views/roles.js',
+  './js/api.js',
   './js/views/opponents.js',
   './js/opponents-data.js',
   './js/background.js',
@@ -44,6 +48,8 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
+  // API-Antworten (Konten, Teamstand) nie aus dem Cache
+  if (url.pathname.startsWith('/api/')) return;
 
   // Network-first: frische Dateien zuerst, Cache nur als Offline-Fallback.
   event.respondWith(

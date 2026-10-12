@@ -21,7 +21,7 @@ export function renderSquad({ store }) {
     }, label)),
   );
 
-  const addBtn = h('button', { class: 'btn primary', type: 'button', onclick: () => editPlayer(null) }, '+ Spieler');
+  const addBtn = h('button', { class: 'btn primary', type: 'button', 'data-min-role': 'trainer', onclick: () => editPlayer(null) }, '+ Spieler');
 
   function paint() {
     for (const chip of chips.querySelectorAll('.chip')) {
@@ -48,7 +48,7 @@ export function renderSquad({ store }) {
       ? [emptyState({
           title: 'Noch keine Spieler im Kader',
           text: 'Trikotnummer, Name, Position und Rolle hinzufügen – danach erscheint der Kader im Live-Spiel.',
-          action: h('button', { class: 'btn primary', type: 'button', onclick: () => editPlayer(null) }, 'Ersten Spieler anlegen'),
+          action: h('button', { class: 'btn primary', type: 'button', 'data-min-role': 'trainer', onclick: () => editPlayer(null) }, 'Ersten Spieler anlegen'),
         })]
       : shown.length === 0
         ? [h('p', { class: 'muted center' }, 'Keine Treffer.')]
@@ -78,7 +78,7 @@ export function renderSquad({ store }) {
         ),
       ),
       h('button', {
-        class: 'icon-btn ghost-danger', type: 'button', title: 'Spieler löschen', 'aria-label': `${playerFullName(p)} löschen`,
+        class: 'icon-btn ghost-danger', type: 'button', 'data-min-role': 'trainer', title: 'Spieler löschen', 'aria-label': `${playerFullName(p)} löschen`,
         onclick: () => removePlayer(p),
       }, '✕'),
     );

@@ -35,7 +35,7 @@ export function renderHome({ store }) {
       h('div', { class: 'hero-actions' },
         live
           ? h('a', { class: 'btn primary xl', href: `#/spiel/${live.id}/live` }, h('i', { class: 'dot live-dot' }), `Weiter: ${live.opponentName || 'Spiel'} ansehen`)
-          : h('a', { class: 'btn primary xl', href: '#/spiel/neu' }, 'Spiel starten'),
+          : h('a', { class: 'btn primary xl', 'data-min-role': 'trainer', href: '#/spiel/neu' }, 'Spiel starten'),
         h('a', { class: 'btn ghost lg', href: '#/kader' }, `Kader (${playerCount})`),
         h('a', { class: 'btn ghost lg', href: '#/statistik' }, 'Statistik'),
       ),
@@ -90,7 +90,7 @@ export function renderHome({ store }) {
         ? [emptyState({
             title: 'Noch keine Spiele',
             text: 'Lege dein erstes Spiel an und erfasse Aktionen live.',
-            action: h('a', { class: 'btn primary', href: '#/spiel/neu' }, 'Erstes Spiel anlegen'),
+            action: h('a', { class: 'btn primary', 'data-min-role': 'trainer', href: '#/spiel/neu' }, 'Erstes Spiel anlegen'),
           })]
         : shown.length === 0
           ? [h('p', { class: 'muted center' }, 'Keine Spiele für diesen Filter.')]
@@ -124,7 +124,7 @@ function nextCard(match) {
   return h('section', { class: 'card next-card' },
     h('div', { class: 'card-head' }, h('h2', {}, 'Nächstes Spiel')),
     matchRowBig(match),
-    h('a', { class: 'btn primary block', href: `#/spiel/${match.id}/live` }, 'Live erfassen'),
+    h('a', { class: 'btn primary block', 'data-min-role': 'trainer', href: `#/spiel/${match.id}/live` }, 'Live erfassen'),
   );
 }
 

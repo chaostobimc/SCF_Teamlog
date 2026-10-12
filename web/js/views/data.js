@@ -52,7 +52,7 @@ export function renderData({ store, navigate }) {
     },
   }, 'Sicherung herunterladen');
 
-  const restoreBtn = h('button', { class: 'btn ghost', type: 'button', onclick: () => fileInput.click() }, 'Sicherung wiederherstellen …');
+  const restoreBtn = h('button', { class: 'btn ghost', type: 'button', 'data-min-role': 'trainer', onclick: () => fileInput.click() }, 'Sicherung wiederherstellen …');
 
   const csvBtn = h('button', {
     class: 'btn ghost', type: 'button', onclick: () => {
@@ -94,7 +94,7 @@ export function renderData({ store, navigate }) {
   }, 'Alle Ereignisse (CSV)');
 
   const resetBtn = h('button', {
-    class: 'btn danger', type: 'button', onclick: () => {
+    class: 'btn danger', type: 'button', 'data-min-role': 'trainer', onclick: () => {
       openDialog({
         title: 'Alle Daten löschen?',
         submitLabel: 'Endgültig löschen',

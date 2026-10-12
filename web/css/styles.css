@@ -727,3 +727,40 @@ html[data-bg="verlauf"] body {
   .shooter-grid { grid-template-columns: 1fr; }
   .shooter-maps { grid-template-columns: 1fr; }
 }
+
+/* ---- Konten, Rollen, Anmeldung (Server-Version) ---- */
+body[data-auth="out"] .topbar { display: none; }
+body[data-auth="out"] .app-main { padding-top: 24px; }
+.hidden { display: none !important; }
+
+/* Rollen: Schreib-Elemente fuer Spieler ausblenden, Admin-Bereich nur fuer Admin */
+body[data-role="spieler"] [data-min-role="trainer"],
+body:not([data-role="admin"]) [data-min-role="admin"] { display: none !important; }
+
+.sync-status { font-size: 12px; color: var(--text-3); white-space: nowrap; }
+.sync-status[data-state="offline"], .sync-status[data-state="keine Berechtigung"] { color: var(--danger); }
+.sync-status[data-state="sendet"] { color: var(--text-2); }
+.account-chip { font-size: 13px; color: var(--text-2); white-space: nowrap; text-decoration: none; padding: 4px 8px; border-radius: var(--radius-sm); border: 1px solid var(--line-soft); }
+.account-chip:hover { color: var(--text); border-color: var(--line); }
+@media (max-width: 980px) { .account-chip, .sync-status { display: none; } }
+
+.login-page { min-height: 70vh; display: grid; place-items: center; padding: 24px 12px; }
+.login-card { width: 100%; max-width: 380px; padding: 28px 24px; display: grid; gap: 14px; justify-items: center; text-align: center; }
+.login-logo { width: 96px; height: 96px; object-fit: contain; }
+.login-title { font-size: 26px; }
+.login-lead { font-size: 14px; }
+.login-form, .stack-form { width: 100%; display: grid; gap: 12px; text-align: left; }
+.login-form .btn { width: 100%; justify-content: center; }
+.form-error { color: var(--danger); font-size: 14px; min-height: 0; }
+.form-error:empty { display: none; }
+.grid-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.admin-create { display: grid; gap: 12px; }
+.role-help { margin: 0 0 12px 18px; display: grid; gap: 4px; }
+.row-actions { white-space: nowrap; display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+.btn.danger { color: var(--danger); }
+.notice.warn { background: var(--warning-soft); color: var(--warning); padding: 10px 12px; border-radius: var(--radius-sm); }
+.temp-pw { display: block; font-size: 20px; font-weight: 700; padding: 12px; background: var(--raised); border-radius: var(--radius-sm); letter-spacing: .04em; word-break: break-all; }
+.stack { display: grid; gap: 10px; }
+/* Spieler sehen die Kaderkarte, koennen sie aber nicht oeffnen */
+body[data-role="spieler"] .player-card-main { pointer-events: none; cursor: default; }
+.row-actions .btn.danger { background: var(--card); color: var(--danger); border-color: var(--danger); }

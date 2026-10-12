@@ -211,6 +211,7 @@ export function createMatch(fields) {
     pauseSec: 0,
     squadPlayerIds: [...(fields.squadPlayerIds ?? [])],
     events: [],
+    updatedAt: fields.updatedAt ?? 0,
   };
 }
 
@@ -251,7 +252,7 @@ export function phaseElapsedSec(match) {
 /** Normalisiert gespeicherte Daten (fehlende Felder ergaenzen). */
 export function normalizeMatch(raw) {
   return {
-    ...createMatch({ id: raw.id, opponentName: raw.opponentName, date: raw.date, isHome: raw.isHome, halfLengthMin: raw.halfLengthMin, squadPlayerIds: raw.squadPlayerIds }),
+    ...createMatch({ id: raw.id, opponentName: raw.opponentName, date: raw.date, isHome: raw.isHome, halfLengthMin: raw.halfLengthMin, squadPlayerIds: raw.squadPlayerIds, updatedAt: raw.updatedAt }),
     status: raw.status ?? 'geplant',
     phase: raw.phase ?? 'ersteHalbzeit',
     firstHalfSec: raw.firstHalfSec ?? 0,
@@ -268,13 +269,27 @@ export function normalizePlayer(raw) {
 // ---------------------------------------------------------- Speicher
 
 /**
- * Speicher in localStorage. Hält Team und Spiele im Speicher und schreibt
- * bei jeder Änderung den kompletten Stand (klein genug fuer eine Saison).
+ * Speicher. Der Teamstand liegt auf dem Server (Datenbank) und wird zwischen den
+ * Geraeten synchronisiert. Der Browser haelt eine lokale Kopie in localStorage
+ * (schneller Start, Offline-Fallback). Schreiben duerfen nur Trainer und Admin.
+ *
+ * remote: optional { fetchState(), pushState({version, team, matches}) }.
+ * Ohne remote arbeitet der Speicher rein lokal (Tests).
  */
 export class Store {
-  constructor(storage = globalThis.localStorage) {
+  constructor(storage = globalThis.localStorage, remote = null) {
     this.storage = storage;
+    this.remote = remote;
     this.data = this._load();
+    this.version = 0;
+    this.role = null; // null = rein lokal
+    this.mustChange = false;
+    this.seq = 0; // zaehlt lokale Aenderungen
+    this.syncedSeq = 0; // Stand der letzten erfolgreich gesendeten Aenderung
+    this.status = 'lokal';
+    this._timer = null;
+    this._inFlight = null;
+    this._again = false;
   }
 
   _load() {
@@ -293,15 +308,152 @@ export class Store {
     return { team: createTeam(), matches: [] };
   }
 
-  _persist() {
+  _cache() {
     try {
       this.storage?.setItem(STORAGE_KEY, JSON.stringify(this.data));
-      return true;
     } catch (error) {
-      console.error('Speichern fehlgeschlagen', error);
-      return false;
+      console.error('Lokale Kopie konnte nicht gespeichert werden', error);
     }
   }
+
+  /** Lokale Aenderung: Cache schreiben und Senden an den Server anstossen. */
+  _persist() {
+    this._cache();
+    this.seq += 1;
+    this._scheduleSync();
+    return true;
+  }
+
+  // ---------------- Rollen und Sitzung
+
+  get canWrite() {
+    return !(this.role === 'spieler' || this.mustChange);
+  }
+
+  get canSync() {
+    return !!this.remote && (this.role === 'trainer' || this.role === 'admin') && !this.mustChange;
+  }
+
+  _assertWrite() {
+    if (!this.canWrite) throw new Error('Nur Ansicht: keine Berechtigung zum Bearbeiten.');
+  }
+
+  /** Nach Anmeldung: Rolle setzen, ausstehende Aenderungen senden. */
+  setSession({ role, mustChange = false }) {
+    this.role = role;
+    this.mustChange = mustChange;
+    if (this.canSync && this.seq !== this.syncedSeq) this._scheduleSync();
+  }
+
+  /** Abmelden: lokale Kopie entfernen (Daten liegen auf dem Server). */
+  clearLocal() {
+    clearTimeout(this._timer);
+    this.storage?.removeItem(STORAGE_KEY);
+    this.data = { team: createTeam(), matches: [] };
+    this.version = 0;
+    this.seq = 0;
+    this.syncedSeq = 0;
+    this.role = null;
+    this.mustChange = false;
+  }
+
+  _setStatus(status) {
+    this.status = status;
+    globalThis.dispatchEvent?.(new CustomEvent('scf-sync', { detail: status }));
+  }
+
+  // ---------------- Synchronisation
+
+  _scheduleSync() {
+    if (!this.canSync) return;
+    clearTimeout(this._timer);
+    this._timer = setTimeout(() => this.push(), 400);
+  }
+
+  /** Teamstand an den Server senden. Bei Versionskonflikt zusammenfuehren und erneut senden. */
+  push() {
+    if (!this.canSync) return Promise.resolve();
+    if (this._inFlight) {
+      this._again = true;
+      return this._inFlight;
+    }
+    const seq = this.seq;
+    this._setStatus('sendet');
+    this._inFlight = (async () => {
+      try {
+        const res = await this.remote.pushState({ version: this.version, team: this.data.team, matches: this.data.matches });
+        this.version = res.version;
+        this.syncedSeq = seq;
+        this._setStatus(this.seq === seq ? 'synchron' : 'sendet');
+      } catch (error) {
+        if (error.status === 409 && error.data?.state) {
+          this._mergeRemote(error.data.state);
+          this._again = true;
+        } else if (error.status === 403) {
+          this._setStatus('keine Berechtigung');
+        } else {
+          this._setStatus('offline');
+        }
+      } finally {
+        this._inFlight = null;
+        if (this._again) {
+          this._again = false;
+          this.push();
+        }
+      }
+    })();
+    return this._inFlight;
+  }
+
+  /**
+   * Konflikt: Server-Stand uebernehmen. Eigene Spiele, die lokal neuer sind
+   * (updatedAt), bleiben erhalten. Team/Kader kommt vom Server.
+   */
+  _mergeRemote(remote) {
+    const serverMatches = remote.matches ?? [];
+    const localById = new Map(this.data.matches.map((m) => [m.id, m]));
+    const serverIds = new Set(serverMatches.map((m) => m.id));
+    const merged = serverMatches.map((sm) => {
+      const lm = localById.get(sm.id);
+      return lm && (lm.updatedAt ?? 0) > (sm.updatedAt ?? 0) ? lm : normalizeMatch(sm);
+    });
+    for (const lm of this.data.matches) {
+      if (!serverIds.has(lm.id) && lm.updatedAt) merged.push(lm); // lokal neu angelegt
+    }
+    this.data = { team: remote.team ?? this.data.team, matches: merged };
+    this.version = remote.version;
+    this._cache();
+  }
+
+  /** Vom Server holen (nur wenn keine lokalen Aenderungen ausstehen). */
+  async pull() {
+    if (!this.remote || this._inFlight || this.seq !== this.syncedSeq) return;
+    let remote;
+    try {
+      remote = await this.remote.fetchState();
+    } catch {
+      this._setStatus('offline');
+      return;
+    }
+    if (this.status !== 'sendet') this._setStatus('synchron');
+    if (remote.version === this.version) return;
+    if (remote.version === 0 && this.hasContent() && this.canSync) {
+      // Erster Start mit Daten aus diesem Browser: auf den leeren Server hochladen.
+      this.seq += 1;
+      this._scheduleSync();
+      return;
+    }
+    this.data = { team: createTeam((remote.team?.players ?? []).map(normalizePlayer)), matches: remote.matches.map(normalizeMatch) };
+    this.version = remote.version;
+    this._cache();
+    globalThis.dispatchEvent?.(new CustomEvent('scf-data', { detail: remote.version }));
+  }
+
+  hasContent() {
+    return this.data.matches.length > 0 || this.data.team.players.length > 0;
+  }
+
+  // ---------------- Zugriff auf Daten
 
   get team() {
     return this.data.team;
@@ -321,6 +473,8 @@ export class Store {
   }
 
   saveMatch(match) {
+    this._assertWrite();
+    match.updatedAt = Date.now();
     const index = this.data.matches.findIndex((m) => m.id === match.id);
     if (index === -1) this.data.matches.push(match);
     else this.data.matches[index] = match;
@@ -329,12 +483,14 @@ export class Store {
   }
 
   deleteMatch(id) {
+    this._assertWrite();
     this.data.matches = this.data.matches.filter((m) => m.id !== id);
     this._persist();
   }
 
-  /** Kader komplett ersetzen (Kader-Einträge bleiben stabil per id). */
+  /** Kader komplett ersetzen (Kader-Eintraege bleiben stabil per id). */
   setPlayers(players) {
+    this._assertWrite();
     this.data.team = { ...this.data.team, players };
     this._persist();
   }
@@ -348,7 +504,8 @@ export class Store {
   }
 
   deletePlayer(id) {
-    this.setPlayers(this.data.team.players.filter((p) => p.id !== id));
+    this._assertWrite();
+    this.data.team = { ...this.data.team, players: this.data.team.players.filter((p) => p.id !== id) };
     // Aufgebote bereinigen, Ereignisse bleiben fuer die Statistik erhalten.
     for (const match of this.data.matches) {
       match.squadPlayerIds = match.squadPlayerIds.filter((pid) => pid !== id);
@@ -369,8 +526,9 @@ export class Store {
 
   /** Stellt eine Sicherung wieder her. Wirft bei ungueltigen Daten einen Fehler. */
   importBackup(backup) {
+    this._assertWrite();
     if (!backup || backup.format !== BACKUP_FORMAT || !Array.isArray(backup.matches) || !backup.team) {
-      throw new Error('Keine gültige SCF-Teamlog-Sicherung.');
+      throw new Error('Keine gueltige SCF-Teamlog-Sicherung.');
     }
     this.data = {
       team: createTeam((backup.team.players ?? []).map(normalizePlayer)),
@@ -380,6 +538,7 @@ export class Store {
   }
 
   resetAll() {
+    this._assertWrite();
     this.data = { team: createTeam(), matches: [] };
     this._persist();
   }

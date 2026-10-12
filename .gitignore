@@ -30,3 +30,9 @@ linux/flutter/ephemeral/
 
 # Hive-Daten liegen im Anwendungsverzeichnis, nicht im Repo
 *.hive
+
+# SCF Teamlog Server: Datenbank und Kopien (nie committen)
+server/data/
+*.db
+*.db-wal
+*.db-shm
