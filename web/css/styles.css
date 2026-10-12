@@ -495,7 +495,6 @@ select.input { appearance: auto; }
 
 @media (max-width: 980px) {
   .grid-2 { grid-template-columns: 1fr; }
-  .main-nav span:last-child { display: none; }
   .brand-sub { display: none; }
   .live { height: auto; min-height: calc(100vh - var(--topbar-h)); }
   .live-body { grid-template-columns: 1fr; padding: 10px; }
@@ -764,3 +763,55 @@ body:not([data-role="admin"]) [data-min-role="admin"] { display: none !important
 /* Spieler sehen die Kaderkarte, koennen sie aber nicht oeffnen */
 body[data-role="spieler"] .player-card-main { pointer-events: none; cursor: default; }
 .row-actions .btn.danger { background: var(--card); color: var(--danger); border-color: var(--danger); }
+
+/* ---- Tablet (721–980 px) und Handy (bis 720 px) ---- */
+@media (max-width: 980px) {
+  .brand-text { display: none; }
+  .main-nav { gap: 2px; }
+  .main-nav a { padding: 7px 9px; font-size: 14px; white-space: nowrap; }
+  .topbar-actions { gap: 6px; }
+  .topbar-actions .btn.primary { white-space: nowrap; }
+  .page-head { flex-wrap: wrap; gap: 10px; }
+  .page-head-actions { flex-wrap: wrap; }
+  .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .squad-grid, .shooter-grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+}
+
+@media (max-width: 720px) {
+  /* Navigation unten als feste Leiste (Daumenbedienung) */
+  .main-nav {
+    position: fixed; left: 0; right: 0; bottom: 0; top: auto; margin: 0; z-index: 60;
+    display: flex; justify-content: space-around; align-items: stretch; gap: 2px;
+    background: var(--card); border-top: 1px solid var(--line);
+    box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.06);
+    padding: 4px 4px calc(4px + env(safe-area-inset-bottom));
+  }
+  .main-nav a {
+    flex: 1 1 0; min-width: 0; text-align: center; padding: 8px 2px; font-size: 12px; line-height: 1.2;
+    border-radius: 8px; white-space: normal;
+  }
+  .main-nav a span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .main-nav a.is-active { background: var(--accent); color: #fff; }
+  .app-main { padding-bottom: calc(84px + env(safe-area-inset-bottom)); }
+  .topbar { padding: 0 10px; min-height: 52px; }
+  .topbar-actions #logout-btn { display: none; }  /* Abmelden steht auf der Konto-Seite */
+  .topbar-actions .btn.primary { padding: 6px 10px; font-size: 13px; }
+  .brand .logo-img { width: 30px; height: 30px; }
+  .brand-name { font-size: 15px; }
+  .page-head h1 { font-size: 22px; }
+  .page-head-actions { width: 100%; }
+  .page-head-actions .btn { flex: 1 1 auto; justify-content: center; }
+  .kpi-grid { gap: 8px; }
+  .stat-card .stat-value, .stat-card .value { font-size: 22px; }
+  .toast-host { bottom: calc(84px + env(safe-area-inset-bottom)) !important; }
+  .overlay { align-items: flex-end; padding: 0; }
+  .dialog { width: 100%; max-width: none; border-radius: 14px 14px 0 0; max-height: 90vh; overflow-y: auto; }
+  .form-grid .span-2 { grid-column: auto; }
+  .btn { min-height: 40px; }
+  .btn.xl { min-height: 52px; font-size: 16px; }
+}
+@media (max-width: 720px) {
+  /* Live-Erfassung: keine untere Leiste, sie wuerde Trefferzonen und Buttons verdecken */
+  body[data-live="yes"] .main-nav { display: none; }
+  body[data-live="yes"] .app-main { padding-bottom: 12px; }
+}

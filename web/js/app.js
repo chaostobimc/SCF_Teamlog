@@ -115,6 +115,7 @@ function route() {
     main.append(result.node ?? result);
     current = result?.dispose ? result : null;
     main.classList.toggle('is-live', r.view === renderLive);
+    document.body.dataset.live = r.view === renderLive ? 'yes' : '';
     window.scrollTo({ top: 0 });
   } catch (error) {
     console.error(error);
