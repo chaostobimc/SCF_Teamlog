@@ -2,7 +2,7 @@
 // SCF Teamlog – Server: liefert die Web-App aus, speichert Konten und den Teamstand
 // in einer SQLite-Datenbank (eingebautes node:sqlite, keine externen Pakete).
 //
-// Start:  node server/server.mjs         (Port 8080, Umgebungsvariablen: PORT, HOST, SCF_DATA_DIR)
+// Start:  node server/server.mjs         (Port 5555, Umgebungsvariablen: PORT, HOST, SCF_DATA_DIR)
 // Rollen: spieler (nur lesen) · trainer (lesen + bearbeiten) · admin (alles + Konten + Datenbank)
 
 import http from 'node:http';
@@ -437,7 +437,7 @@ export function createServer({ db = openDb(), webDir = WEB_DIR } = {}) {
 // ------------------------------------------------------------ Start
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const port = Number(process.env.PORT ?? 8080);
+  const port = Number(process.env.PORT ?? 5555);
   const host = process.env.HOST ?? '0.0.0.0';
   const server = createServer();
   server.listen(port, host, () => {

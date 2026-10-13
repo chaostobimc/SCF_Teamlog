@@ -15,7 +15,7 @@ installieren (PWA) und funktioniert danach offline.
 
 ```bash
 cd web
-npm start          # Server mit Datenbank + Web-App auf http://localhost:8080
+npm start          # Server mit Datenbank + Web-App auf http://localhost:5555
 npm test           # Logik-Tests (Uhr, Torwart-Mapping, Statistik, Sicherung)
 ```
 
@@ -172,7 +172,7 @@ und speichert Konten und den Teamstand in einer SQLite-Datenbank. Es werden kein
 externen Pakete benötigt (Node.js 22 mit eingebautem `node:sqlite`).
 
 ```bash
-node server/server.mjs                  # http://0.0.0.0:8080
+node server/server.mjs                  # http://0.0.0.0:5555
 PORT=3000 SCF_DATA_DIR=/pfad node server/server.mjs
 ```
 
