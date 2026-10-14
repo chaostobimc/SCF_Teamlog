@@ -96,27 +96,76 @@ test('Admin legt Trainer und Spieler an, Passwort-Reset erzwingt Wechsel', async
 });
 
 test('Rollen: Spieler lesen, aber nicht schreiben', async () => {
-  const state = (await call('GET', '/api/state', { cookie: playerCookie })).json;
-  const r = await call('PUT', '/api/state', { cookie: playerCookie, body: { version: state.version, team: state.team, matches: [] } });
+  const r = await call('PUT', '/api/changes', { cookie: playerCookie, body: { since: 0, matches: [{ id: 'x1', updatedAt: 1 }] } });
   assert.equal(r.status, 403);
-  const again = (await call('GET', '/api/state', { cookie: playerCookie })).json;
-  assert.equal(again.version, state.version);
+  const again = (await call('GET', '/api/changes?since=0', { cookie: playerCookie })).json;
+  assert.ok(!(again.matches ?? []).some((m) => m.id === 'x1'));
 });
 
-test('Trainer schreibt, Versionsprüfung verhindert Überschreiben', async () => {
-  const s = (await call('GET', '/api/state', { cookie: trainerCookie })).json;
-  let r = await call('PUT', '/api/state', { cookie: trainerCookie, body: { version: s.version, team: s.team, matches: [{ id: 'm1', opponentName: 'Alpha' }] } });
+test('Trainer sendet Aenderungen, Abruf liefert nur das Neue', async () => {
+  const before = (await call('GET', '/api/changes?since=0', { cookie: trainerCookie })).json.version;
+  let r = await call('PUT', '/api/changes', {
+    cookie: trainerCookie,
+    body: { since: before, matches: [{ id: 'm1', opponentName: 'Alpha', updatedAt: 100 }], events: [{ matchId: 'm1', event: { id: 'e1', type: 'tor', createdAt: 1 } }] },
+  });
   assert.equal(r.status, 200);
-  const newVersion = r.json.version;
-  // Zweites Geraet mit altem Stand
-  r = await call('PUT', '/api/state', { cookie: adminCookie, body: { version: s.version, team: s.team, matches: [] } });
-  assert.equal(r.status, 409);
-  assert.equal(r.json.state.matches.length, 1);
-  assert.equal(r.json.state.version, newVersion);
+  assert.equal(r.json.based, true);
+  assert.equal(r.json.skipped, false);
+  const v1 = r.json.version;
+  assert.equal(v1, before + 1);
+
+  // Nur eine Aenderung seit v1: ein neues Ereignis, Kopf unveraendert.
+  r = await call('PUT', '/api/changes', { cookie: trainerCookie, body: { since: v1, events: [{ matchId: 'm1', event: { id: 'e2', type: 'fehlwurf', createdAt: 2 } }] } });
+  assert.equal(r.json.version, v1 + 1);
+  const delta = (await call('GET', `/api/changes?since=${v1}`, { cookie: trainerCookie })).json;
+  assert.equal(delta.version, v1 + 1);
+  assert.deepEqual(delta.events.map((e) => e.event.id), ['e2']);
+  assert.equal(delta.matches, undefined, 'Kopf unveraendert, nicht erneut gesendet');
+
+  // Vollstaendiger Stand enthaelt beide Ereignisse.
+  const full = (await call('GET', '/api/state', { cookie: trainerCookie })).json;
+  assert.equal(full.matches.find((m) => m.id === 'm1').events.length, 2);
 });
 
-test('Ungueltiger Teamstand wird abgelehnt', async () => {
-  const r = await call('PUT', '/api/state', { cookie: adminCookie, body: { version: 0, matches: 'kaputt' } });
+test('Veraltete Spiel-Kopf-Aenderung wird abgewiesen, Loeschung und Ereignis-Entfernung wirken', async () => {
+  const v = (await call('GET', '/api/changes?since=0', { cookie: trainerCookie })).json.version;
+  // Neuerer Stand liegt auf dem Server (updatedAt 100) ...
+  let r = await call('PUT', '/api/changes', { cookie: trainerCookie, body: { since: v, matches: [{ id: 'm1', opponentName: 'Neu', updatedAt: 200 }] } });
+  assert.equal(r.json.skipped, false);
+  // ... eine aeltere Sendung wird nicht uebernommen und als uebersprungen gemeldet.
+  r = await call('PUT', '/api/changes', { cookie: trainerCookie, body: { since: r.json.version, matches: [{ id: 'm1', opponentName: 'Alt', updatedAt: 150 }] } });
+  assert.equal(r.json.skipped, true);
+  const full = (await call('GET', '/api/state', { cookie: trainerCookie })).json;
+  assert.equal(full.matches.find((m) => m.id === 'm1').opponentName, 'Neu');
+
+  // Ereignis entfernen (Undo) wird als Loeschung ausgeliefert.
+  r = await call('PUT', '/api/changes', { cookie: trainerCookie, body: { since: r.json.version, deleteEvents: [{ matchId: 'm1', id: 'e2' }] } });
+  const d = (await call('GET', `/api/changes?since=${r.json.version - 1}`, { cookie: trainerCookie })).json;
+  assert.deepEqual(d.deleteEvents, [{ matchId: 'm1', id: 'e2' }]);
+});
+
+test('Long-Polling: Abruf wartet und kommt sofort, wenn etwas geschrieben wird', async () => {
+  const v = (await call('GET', '/api/changes?since=0', { cookie: trainerCookie })).json.version;
+  const started = Date.now();
+  const waiting = call('GET', `/api/changes?since=${v}&wait=10`, { cookie: trainerCookie });
+  await new Promise((r) => setTimeout(r, 150));
+  await call('PUT', '/api/changes', { cookie: trainerCookie, body: { since: v, matches: [{ id: 'm2', opponentName: 'Beta', updatedAt: 300 }] } });
+  const r = await waiting;
+  assert.ok(Date.now() - started < 5000, 'Antwort kommt sofort nach der Aenderung');
+  assert.equal(r.json.version, v + 1);
+  assert.deepEqual(r.json.matches.map((m) => m.id), ['m2']);
+});
+
+test('Long-Polling ohne Aenderung: leere Antwort nach Ablauf (ohne Daten)', async () => {
+  const v = (await call('GET', '/api/changes?since=0', { cookie: trainerCookie })).json.version;
+  const r = await call('GET', `/api/changes?since=${v}&wait=1`, { cookie: trainerCookie });
+  assert.equal(r.json.version, v);
+  assert.equal(r.json.matches, undefined);
+  assert.equal(r.json.events, undefined);
+});
+
+test('Ungueltige Aenderungen werden abgelehnt', async () => {
+  const r = await call('PUT', '/api/changes', { cookie: adminCookie, body: { since: 0, matches: 'kaputt' } });
   assert.equal(r.status, 400);
 });
 
@@ -125,7 +174,7 @@ test('Trainer hat keinen Admin-Zugriff, Admin hat ihn', async () => {
   assert.equal((await call('GET', '/api/admin/users', { cookie: playerCookie })).status, 403);
   const r = await call('GET', '/api/admin/users', { cookie: adminCookie });
   assert.equal(r.json.users.length, 3);
-  assert.equal((await call('GET', '/api/admin/export', { cookie: adminCookie })).json.state.matches.length, 1);
+  assert.equal((await call('GET', '/api/admin/export', { cookie: adminCookie })).json.state.matches.length, 2);
   const file = await fetch(base + '/api/admin/db-file', { headers: { Cookie: adminCookie } });
   assert.equal(file.status, 200);
   assert.equal(Buffer.from(await file.arrayBuffer()).subarray(0, 6).toString(), 'SQLite');

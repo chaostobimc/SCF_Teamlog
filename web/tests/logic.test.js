@@ -172,33 +172,75 @@ test('Live: Torwart-Mapping auf Gegentore und Gegnernummer', () => {
 
 test('Live: Halbzeitwechsel per Uhr und Spielende', () => {
   const store = setupStore();
-  const live = new LiveSession({ store, matchId: 'm1' });
-  live.toggleClock();
-  live.setPeriodClock(20 * 60 - 1);
-  live.dispose();
-
-  // Zeit kuenstlich um 2 s vorstellen und einen Tick ausloesen
   const realNow = Date.now;
   let fake = realNow();
   Date.now = () => fake;
   try {
-    const l2 = new LiveSession({ store, matchId: 'm1' });
-    l2._startTimer();
+    const live = new LiveSession({ store, matchId: 'm1' });
+    live.setPeriodClock(20 * 60 - 1);
+    live.toggleClock(); // Anpfiff: Uhr laeuft ab jetzt aus der Startzeit
+    assert.equal(live.running, true);
     fake += 2000;
-    l2._tick();
-    assert.equal(l2.match.phase, 'halbzeitpause');
-    assert.equal(l2.match.firstHalfSec, 20 * 60);
-    l2.startSecondHalf();
-    assert.equal(l2.match.phase, 'zweiteHalbzeit');
-    l2.setPeriodClock(20 * 60 - 1);
+    assert.equal(live.match.phase, 'halbzeitpause');
+    assert.equal(live.match.firstHalfSec, 20 * 60);
+    live.startSecondHalf();
+    assert.equal(live.match.phase, 'zweiteHalbzeit');
+    live.setPeriodClock(20 * 60 - 1);
+    live.toggleClock();
     fake += 2000;
-    l2._tick();
-    assert.equal(l2.match.status, 'beendet');
-    assert.equal(l2.match.phase, 'beendet');
-    l2.dispose();
+    assert.equal(live.match.status, 'beendet');
+    assert.equal(live.match.phase, 'beendet');
+    live.dispose();
   } finally {
     Date.now = realNow;
   }
+});
+
+test('Spieluhr: laeuft aus der Startzeit weiter, Halbzeitende wird berechnet', () => {
+  const start = 1_000_000;
+  const m = { ...M.createMatch({ id: 'x', halfLengthMin: 1 }), status: 'laufend', clockRunning: true, clockAt: start };
+  assert.equal(M.advanceClock(m, start), m, 'ohne Zeitablauf unveraendert');
+  const later = M.advanceClock(m, start + 30_500);
+  assert.equal(later.firstHalfSec, 30);
+  assert.equal(later.clockAt, start + 30_000, 'Startzeit rueckt um ganze Sekunden vor');
+  const end = M.advanceClock(m, start + 61_000);
+  assert.equal(end.phase, 'halbzeitpause');
+  assert.equal(end.firstHalfSec, 60);
+  assert.equal(end.clockRunning, false);
+  const stopped = { ...m, clockRunning: false, clockAt: 0 };
+  assert.equal(M.advanceClock(stopped, start + 99_000), stopped, 'angehaltene Uhr laeuft nicht');
+});
+
+test('Sync: nur Aenderungen werden gesendet, Abruf ohne Neues sendet nichts', async () => {
+  const sent = [];
+  const remote = {
+    fetchChanges: async () => ({ version: 0, now: Date.now() }),
+    pushChanges: async (body) => {
+      sent.push(body);
+      return { version: sent.length, based: true, skipped: false, now: Date.now() };
+    },
+  };
+  const store = new M.Store(memoryStorage(), remote);
+  store.setSession({ role: 'trainer' });
+  await store.pull({ wait: 0 });
+  store.setPlayers([M.createPlayer({ id: 'p1', number: 7, firstName: 'Max', lastName: 'Muster', position: 'feldspieler' })]);
+  await store.push();
+  assert.ok(sent[0].team, 'Team wird gesendet');
+
+  store.saveMatch(M.createMatch({ id: 'm9', opponentName: 'Gegner' }));
+  await store.push();
+  assert.equal(sent[1].matches.length, 1);
+  assert.equal(sent[1].events, undefined, 'keine Ereignisse gesendet');
+
+  const m = store.getMatch('m9');
+  m.events = [...m.events, M.createEvent({ id: 'e1', playerId: 'p1', type: 'tor', createdAt: 5 })];
+  store.saveMatch(m);
+  await store.push();
+  assert.equal(sent[2].matches, undefined, 'Spiel-Kopf unveraendert, nicht erneut gesendet');
+  assert.deepEqual(sent[2].events.map((e) => e.event.id), ['e1']);
+
+  await store.push();
+  assert.equal(sent.length, 3, 'ohne Aenderung wird nichts gesendet');
 });
 
 test('Store: Sicherung exportieren und wieder einlesen', () => {

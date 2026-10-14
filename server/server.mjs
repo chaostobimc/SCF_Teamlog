@@ -13,6 +13,8 @@ import { tmpdir } from 'node:os';
 import { readFile, stat } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
+import { gzipSync } from 'node:zlib';
+import { advanceClock } from '../web/js/model.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const WEB_DIR = path.resolve(here, '..', 'web');
@@ -74,7 +76,73 @@ export function openDb(file = DEFAULT_DB) {
   `);
   db.prepare('INSERT OR IGNORE INTO app_state (id, version, data, updated_at) VALUES (1, 0, ?, ?)')
     .run(JSON.stringify(EMPTY_STATE), Date.now());
+  // Teamstand in einzelne Zeilen (Spiele, Ereignisse), damit nur Aenderungen uebertragen werden.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS team_state (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      data TEXT NOT NULL,
+      seq INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS matches (
+      id TEXT PRIMARY KEY,
+      header TEXT NOT NULL,
+      updated_at INTEGER NOT NULL DEFAULT 0,
+      seq INTEGER NOT NULL,
+      deleted INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS matches_seq ON matches (seq);
+    CREATE TABLE IF NOT EXISTS events (
+      id TEXT PRIMARY KEY,
+      match_id TEXT NOT NULL,
+      data TEXT NOT NULL,
+      seq INTEGER NOT NULL,
+      deleted INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS events_seq ON events (seq);
+    CREATE INDEX IF NOT EXISTS events_match ON events (match_id);
+  `);
+  migrateLegacyState(db);
   return db;
+}
+
+/** Uebernimmt einen aelteren Teamstand (ein JSON-Dokument in app_state) in die Zeilen-Tabellen. */
+function migrateLegacyState(db) {
+  if (db.prepare('SELECT COUNT(*) AS n FROM team_state').get().n > 0) return;
+  const row = db.prepare('SELECT version, data FROM app_state WHERE id = 1').get();
+  let legacy = {};
+  try { legacy = JSON.parse(row.data) ?? {}; } catch { legacy = {}; }
+  const seq = Math.max(row.version, 1);
+  db.exec('BEGIN');
+  try {
+    db.prepare('INSERT INTO team_state (id, data, seq) VALUES (1, ?, ?)')
+      .run(JSON.stringify(legacy.team ?? EMPTY_STATE.team), seq);
+    const insM = db.prepare('INSERT OR REPLACE INTO matches (id, header, updated_at, seq, deleted) VALUES (?, ?, ?, ?, 0)');
+    const insE = db.prepare('INSERT OR REPLACE INTO events (id, match_id, data, seq, deleted) VALUES (?, ?, ?, ?, 0)');
+    for (const m of legacy.matches ?? []) {
+      const { events = [], ...header } = m;
+      insM.run(m.id, JSON.stringify(header), m.updatedAt ?? 0, seq);
+      for (const e of events) insE.run(e.id, m.id, JSON.stringify(e), seq);
+    }
+    db.prepare("UPDATE app_state SET version = ?, data = '{}' WHERE id = 1").run(seq);
+    db.exec('COMMIT');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+}
+
+const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+
+/** Prueft die Aenderungen aus einer Sendung. */
+function validChanges(b) {
+  if (!isObj(b)) return false;
+  if (b.team !== undefined && !(isObj(b.team) && Array.isArray(b.team.players))) return false;
+  const list = (v, ok) => v === undefined || (Array.isArray(v) && v.length <= 20000 && v.every(ok));
+  const id = (x) => typeof x === 'string' && x.length > 0 && x.length <= 100;
+  return list(b.matches, (h) => isObj(h) && id(h.id))
+    && list(b.deleteMatches, id)
+    && list(b.events, (x) => isObj(x) && isObj(x.event) && id(x.event.id) && id(x.matchId))
+    && list(b.deleteEvents, (x) => isObj(x) && id(x.id) && id(x.matchId));
 }
 
 // ------------------------------------------------------------ Hilfsfunktionen
@@ -130,12 +198,6 @@ function validPassword(p) {
   return typeof p === 'string' && p.length >= MIN_PASSWORD && p.length <= 200;
 }
 
-function validState(body) {
-  return body && typeof body === 'object'
-    && body.team && typeof body.team === 'object' && Array.isArray(body.team.players)
-    && Array.isArray(body.matches);
-}
-
 class HttpError extends Error {
   constructor(status, message, extra = {}) {
     super(message);
@@ -150,8 +212,16 @@ export function createServer({ db = openDb(), webDir = WEB_DIR } = {}) {
   const loginFails = new Map(); // username -> { count, since }
 
   const sendJson = (res, status, body, headers = {}) => {
-    res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...headers });
-    res.end(JSON.stringify(body));
+    const raw = JSON.stringify(body);
+    const base = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...headers };
+    const gzipOk = String(res.req?.headers?.['accept-encoding'] ?? '').includes('gzip');
+    if (gzipOk && raw.length > 1024) {
+      res.writeHead(status, { ...base, 'Content-Encoding': 'gzip', Vary: 'Accept-Encoding' });
+      res.end(gzipSync(raw));
+      return;
+    }
+    res.writeHead(status, base);
+    res.end(raw);
   };
 
   const readJson = (req, limit = 25 * 1024 * 1024) => new Promise((resolve, reject) => {
@@ -214,10 +284,135 @@ export function createServer({ db = openDb(), webDir = WEB_DIR } = {}) {
 
   const adminCount = () => db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'admin'").get().n;
 
+  const currentVersion = () => db.prepare('SELECT version FROM app_state WHERE id = 1').get().version;
+
+  /** Vollstaendiger Teamstand (fuer Export und Abruf). */
   const readState = () => {
-    const row = db.prepare('SELECT version, data, updated_at FROM app_state WHERE id = 1').get();
-    const data = JSON.parse(row.data);
-    return { version: row.version, team: data.team, matches: data.matches, updatedAt: row.updated_at };
+    const row = db.prepare('SELECT version, updated_at FROM app_state WHERE id = 1').get();
+    const team = JSON.parse(db.prepare('SELECT data FROM team_state WHERE id = 1').get().data);
+    const byMatch = new Map();
+    for (const e of db.prepare('SELECT match_id, data FROM events WHERE deleted = 0').all()) {
+      if (!byMatch.has(e.match_id)) byMatch.set(e.match_id, []);
+      byMatch.get(e.match_id).push(JSON.parse(e.data));
+    }
+    const matches = db.prepare('SELECT header FROM matches WHERE deleted = 0').all().map((r) => {
+      const h = JSON.parse(r.header);
+      return { ...h, events: byMatch.get(h.id) ?? [] };
+    });
+    return { version: row.version, team, matches, updatedAt: row.updated_at };
+  };
+
+  /** Alles, was seit Version `since` geaendert wurde (leere Listen werden weggelassen). */
+  const changesSince = (since) => {
+    const out = {};
+    const team = db.prepare('SELECT data, seq FROM team_state WHERE id = 1').get();
+    if (team.seq > since) out.team = JSON.parse(team.data);
+    const matches = [];
+    const deletedMatches = [];
+    for (const r of db.prepare('SELECT id, header, deleted FROM matches WHERE seq > ?').all(since)) {
+      if (r.deleted) deletedMatches.push(r.id);
+      else matches.push(JSON.parse(r.header));
+    }
+    const events = [];
+    const deleteEvents = [];
+    for (const r of db.prepare('SELECT id, match_id, data, deleted FROM events WHERE seq > ?').all(since)) {
+      if (r.deleted) deleteEvents.push({ matchId: r.match_id, id: r.id });
+      else events.push({ matchId: r.match_id, event: JSON.parse(r.data) });
+    }
+    if (matches.length) out.matches = matches;
+    if (deletedMatches.length) out.deletedMatches = deletedMatches;
+    if (events.length) out.events = events;
+    if (deleteEvents.length) out.deleteEvents = deleteEvents;
+    return out;
+  };
+
+  // Wartende Abfragen (Long-Polling): werden bei jeder Aenderung geweckt.
+  const waiters = new Set();
+  const notifyWaiters = () => { for (const wake of [...waiters]) wake(); };
+  const waitForChange = (since, ms, res) => new Promise((resolve) => {
+    const wake = () => { clearTimeout(timer); waiters.delete(wake); resolve(); };
+    const timer = setTimeout(wake, ms);
+    waiters.add(wake);
+    res.on('close', wake);
+  });
+
+  /**
+   * Aenderungen speichern. Pro Spiel gewinnt der neuere Stand (updatedAt), es sei denn force.
+   * Ereignisse sind eindeutig benannt und werden zusammengefuehrt. Geloeschtes bleibt geloescht.
+   * based: die Sendung beruht auf dem aktuellen Stand (dann genuegt die neue Version ohne Abruf).
+   */
+  const applyChanges = (body, username, { force = false } = {}) => {
+    const cur = currentVersion();
+    const based = body.since === cur;
+    const next = cur + 1;
+    const now = Date.now();
+    let wrote = false;
+    let skipped = false;
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      if (body.team) {
+        db.prepare('UPDATE team_state SET data = ?, seq = ? WHERE id = 1').run(JSON.stringify(body.team), next);
+        wrote = true;
+      }
+      const getM = db.prepare('SELECT updated_at, deleted FROM matches WHERE id = ?');
+      const upsertM = db.prepare('INSERT OR REPLACE INTO matches (id, header, updated_at, seq, deleted) VALUES (?, ?, ?, ?, 0)');
+      for (const raw of body.matches ?? []) {
+        const { events: _ignored, ...header } = raw;
+        const old = getM.get(header.id);
+        if (old?.deleted || (old && !force && old.updated_at > (header.updatedAt ?? 0))) {
+          skipped = true;
+          continue;
+        }
+        upsertM.run(header.id, JSON.stringify(header), header.updatedAt ?? 0, next);
+        wrote = true;
+      }
+      const delM = db.prepare("UPDATE matches SET deleted = 1, header = '{}', seq = ? WHERE id = ? AND deleted = 0");
+      const delEvs = db.prepare('UPDATE events SET deleted = 1, seq = ? WHERE match_id = ? AND deleted = 0');
+      for (const id of body.deleteMatches ?? []) {
+        if (delM.run(next, id).changes) {
+          delEvs.run(next, id);
+          wrote = true;
+        }
+      }
+      const getE = db.prepare('SELECT deleted FROM events WHERE id = ?');
+      const upsertE = db.prepare('INSERT OR REPLACE INTO events (id, match_id, data, seq, deleted) VALUES (?, ?, ?, ?, 0)');
+      for (const { matchId, event } of body.events ?? []) {
+        const m = getM.get(matchId);
+        const old = getE.get(event.id);
+        if (!m || m.deleted || old?.deleted) {
+          skipped = true;
+          continue;
+        }
+        upsertE.run(event.id, matchId, JSON.stringify(event), next);
+        wrote = true;
+      }
+      const delE = db.prepare('UPDATE events SET deleted = 1, seq = ? WHERE id = ? AND match_id = ? AND deleted = 0');
+      for (const { matchId, id } of body.deleteEvents ?? []) {
+        if (delE.run(next, id, matchId).changes) wrote = true;
+      }
+      if (wrote) {
+        db.prepare('UPDATE app_state SET version = ?, updated_at = ?, updated_by = ? WHERE id = 1').run(next, now, username);
+      }
+      db.exec('COMMIT');
+    } catch (error) {
+      db.exec('ROLLBACK');
+      throw error;
+    }
+    if (wrote) notifyWaiters();
+    return { version: wrote ? next : cur, based, skipped, wrote };
+  };
+
+  /** Laufende Spieluhren: Halbzeitende und Spielende serverseitig nachfuehren, auch ohne offenes Geraet. */
+  const advanceRunningClocks = () => {
+    const rows = db.prepare("SELECT header FROM matches WHERE deleted = 0 AND header LIKE '%\"clockRunning\":true%'").all();
+    const now = Date.now();
+    const changed = [];
+    for (const r of rows) {
+      const h = JSON.parse(r.header);
+      const n = advanceClock(h, now);
+      if (n.phase !== h.phase || n.status !== h.status) changed.push(n);
+    }
+    if (changed.length) applyChanges({ since: -1, matches: changed }, 'Uhr', { force: true });
   };
 
   // ---------------- API-Routen
@@ -286,19 +481,27 @@ export function createServer({ db = openDb(), webDir = WEB_DIR } = {}) {
       return sendJson(res, 200, readState());
     }
 
-    if (p === '/api/state' && m === 'PUT') {
+    // Abruf: nur Aenderungen seit Version `since`. Mit wait > 0 wartet der Server auf Neues.
+    if (p === '/api/changes' && m === 'GET') {
+      requireUser(req);
+      let since = Math.max(0, Math.floor(Number(url.searchParams.get('since')) || 0));
+      const wait = Math.min(30, Math.max(0, Number(url.searchParams.get('wait')) || 0));
+      if (since > currentVersion()) since = 0; // Datenbank wurde zurueckgesetzt: alles neu senden
+      if (wait > 0 && currentVersion() <= since) await waitForChange(since, wait * 1000, res);
+      const version = currentVersion();
+      const body = { version, now: Date.now() };
+      if (version > since) Object.assign(body, changesSince(since));
+      return sendJson(res, 200, body);
+    }
+
+    // Senden: nur geaenderte Spiele, Ereignisse und Team (ab Trainer).
+    if (p === '/api/changes' && m === 'PUT') {
       const user = requireUser(req, { min: 'trainer' });
-      const body = await readJson(req);
-      if (!validState(body)) throw new HttpError(400, 'Ungueltiger Teamstand.');
-      const current = db.prepare('SELECT version FROM app_state WHERE id = 1').get().version;
-      if (body.version !== current) {
-        // Anderes Geraet hat zwischenzeitlich gespeichert: aktuellen Stand zurueckgeben.
-        throw new HttpError(409, 'Der Stand wurde auf einem anderen Gerät geändert.', { state: readState() });
-      }
-      const data = JSON.stringify({ team: body.team, matches: body.matches });
-      db.prepare('UPDATE app_state SET version = version + 1, data = ?, updated_at = ?, updated_by = ? WHERE id = 1')
-        .run(data, Date.now(), user.username);
-      return sendJson(res, 200, { version: current + 1 });
+      const raw = await readJson(req);
+      const body = { ...raw, since: Number.isInteger(raw?.since) ? raw.since : -1 };
+      if (!validChanges(body)) throw new HttpError(400, 'Ungueltige Aenderungen.');
+      const result = applyChanges(body, user.username);
+      return sendJson(res, 200, { version: result.version, based: result.based, skipped: result.skipped, now: Date.now() });
     }
 
     // ---------------- Admin
@@ -418,7 +621,7 @@ export function createServer({ db = openDb(), webDir = WEB_DIR } = {}) {
     }
   }
 
-  return http.createServer(async (req, res) => {
+  const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
     try {
       if (url.pathname.startsWith('/api/')) await api(req, res, url);
@@ -432,6 +635,16 @@ export function createServer({ db = openDb(), webDir = WEB_DIR } = {}) {
       }
     }
   });
+  const clockTimer = setInterval(() => {
+    try {
+      advanceRunningClocks();
+    } catch (error) {
+      console.error('Spieluhr:', error);
+    }
+  }, 2000);
+  clockTimer.unref();
+  server.on('close', () => clearInterval(clockTimer));
+  return server;
 }
 
 // ------------------------------------------------------------ Start

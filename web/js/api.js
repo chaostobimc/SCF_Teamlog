@@ -7,8 +7,8 @@ export class ApiError extends Error {
   }
 }
 
-export async function api(path, { method = 'GET', body } = {}) {
-  const init = { method, credentials: 'same-origin', headers: {} };
+export async function api(path, { method = 'GET', body, signal } = {}) {
+  const init = { method, credentials: 'same-origin', headers: {}, signal };
   if (body !== undefined) {
     init.headers['Content-Type'] = 'application/json';
     init.body = JSON.stringify(body);
@@ -16,7 +16,8 @@ export async function api(path, { method = 'GET', body } = {}) {
   let res;
   try {
     res = await fetch(new URL('api' + path, document.baseURI), init);
-  } catch {
+  } catch (error) {
+    if (error.name === 'AbortError') throw error;
     throw new ApiError(0, 'Keine Verbindung zum Server.');
   }
   const data = await res.json().catch(() => ({}));
@@ -24,8 +25,9 @@ export async function api(path, { method = 'GET', body } = {}) {
   return data;
 }
 
-/** Schnittstelle fuer den Store (Teamstand). */
+/** Schnittstelle fuer den Store (Teamstand, nur Aenderungen). */
 export const remoteState = {
-  fetchState: () => api('/state'),
-  pushState: (body) => api('/state', { method: 'PUT', body }),
+  fetchChanges: ({ since = 0, wait = 0, signal } = {}) =>
+    api(`/changes?since=${Number(since) || 0}&wait=${Number(wait) || 0}`, { signal }),
+  pushChanges: (body) => api('/changes', { method: 'PUT', body }),
 };

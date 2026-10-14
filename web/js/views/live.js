@@ -536,10 +536,15 @@ export function renderLive({ store, navigate, params }) {
   setTab('ziel');
   paintAll();
 
+  // Aenderungen von anderen Geraeten (Ereignisse, Uhr): Anzeige aktualisieren, Auswahl bleibt.
+  const onRemote = () => session.refresh();
+  globalThis.addEventListener('scf-live-refresh', onRemote);
+
   return {
     node: root,
     dispose() {
       disposed = true;
+      globalThis.removeEventListener('scf-live-refresh', onRemote);
       document.removeEventListener('keydown', onKey);
       document.removeEventListener('visibilitychange', onVisibility);
       clearTimeout(digitTimer);

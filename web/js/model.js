@@ -211,6 +211,8 @@ export function createMatch(fields) {
     pauseSec: 0,
     squadPlayerIds: [...(fields.squadPlayerIds ?? [])],
     events: [],
+    clockRunning: false,
+    clockAt: 0,
     updatedAt: fields.updatedAt ?? 0,
   };
 }
@@ -258,6 +260,8 @@ export function normalizeMatch(raw) {
     firstHalfSec: raw.firstHalfSec ?? 0,
     secondHalfSec: raw.secondHalfSec ?? 0,
     pauseSec: raw.pauseSec ?? 0,
+    clockRunning: !!raw.clockRunning,
+    clockAt: raw.clockAt ?? 0,
     events: (raw.events ?? []).map((e) => createEvent(e)),
   };
 }
@@ -266,14 +270,65 @@ export function normalizePlayer(raw) {
   return createPlayer(raw);
 }
 
+// ---------------------------------------------------------- Zeit
+
+/** Versatz der Geraeteuhr zur Serverzeit (ms). Wird bei jeder Serverantwort nachgefuehrt. */
+export const clockSync = { offset: 0 };
+export const serverNow = () => Date.now() + clockSync.offset;
+
+const CLOCK_KEY = { ersteHalbzeit: 'firstHalfSec', halbzeitpause: 'pauseSec', zweiteHalbzeit: 'secondHalfSec' };
+
+/**
+ * Spieluhr fortschreiben. Laeuft die Uhr, werden seit clockAt (Serverzeit) ganze
+ * Sekunden auf die aktuelle Phase addiert. Erreicht eine Halbzeit ihre Laenge, wechselt
+ * die Phase (Halbzeitpause bzw. Spielende). Reine Funktion: ohne Aenderung wird das
+ * gleiche Objekt zurueckgegeben. So laeuft die Zeit auch ohne offenes Geraet weiter.
+ */
+export function advanceClock(match, now = serverNow()) {
+  if (!match.clockRunning || !match.clockAt || match.status !== 'laufend') return match;
+  const key = CLOCK_KEY[match.phase];
+  if (!key) return match;
+  const secs = Math.floor((now - match.clockAt) / 1000);
+  if (secs <= 0) return match;
+  const half = halfLengthSec(match);
+  const value = match[key] + secs;
+  if (match.phase === 'halbzeitpause' || value < half) {
+    return { ...match, [key]: value, clockAt: match.clockAt + secs * 1000 };
+  }
+  if (match.phase === 'ersteHalbzeit') {
+    return { ...match, firstHalfSec: half, phase: 'halbzeitpause', clockRunning: false, clockAt: 0, updatedAt: now };
+  }
+  return { ...match, secondHalfSec: half, phase: 'beendet', status: 'beendet', clockRunning: false, clockAt: 0, updatedAt: now };
+}
+
 // ---------------------------------------------------------- Speicher
+
+/** Stabile JSON-Darstellung (Schluessel sortiert), fuer den Vergleich mit dem Server-Stand. */
+export function canon(value) {
+  return JSON.stringify(value, (key, val) => {
+    if (val && typeof val === 'object' && !Array.isArray(val)) {
+      return Object.keys(val).sort().reduce((o, k) => { o[k] = val[k]; return o; }, {});
+    }
+    return val;
+  });
+}
+
+const emptySnap = () => ({ team: '', matches: new Map() });
+const headerKey = (m) => { const { events, updatedAt, ...header } = m; return canon(header); };
+const stripEvents = ({ events, ...header }) => header;
+const byCreated = (a, b) => (a.createdAt - b.createdAt) || (a.id < b.id ? -1 : 1);
 
 /**
  * Speicher. Der Teamstand liegt auf dem Server (Datenbank) und wird zwischen den
  * Geraeten synchronisiert. Der Browser haelt eine lokale Kopie in localStorage
  * (schneller Start, Offline-Fallback). Schreiben duerfen nur Trainer und Admin.
  *
- * remote: optional { fetchState(), pushState({version, team, matches}) }.
+ * Synchronisation: Nur Aenderungen werden gesendet (Spiel-Kopf und einzelne Ereignisse),
+ * nur neue Aenderungen werden empfangen (Long-Polling). Die Vergleichsbasis ist der
+ * zuletzt bekannte Server-Stand (snap). Die Spieluhr wird nicht gesendet, sondern
+ * als Startzeit (clockAt) gespeichert.
+ *
+ * remote: { fetchChanges({since, wait, signal}), pushChanges(body) }.
  * Ohne remote arbeitet der Speicher rein lokal (Tests).
  */
 export class Store {
@@ -284,9 +339,9 @@ export class Store {
     this.version = 0;
     this.role = null; // null = rein lokal
     this.mustChange = false;
-    this.seq = 0; // zaehlt lokale Aenderungen
-    this.syncedSeq = 0; // Stand der letzten erfolgreich gesendeten Aenderung
     this.status = 'lokal';
+    this.synced = false; // erster Abgleich mit dem Server abgeschlossen
+    this.snap = emptySnap();
     this._timer = null;
     this._inFlight = null;
     this._again = false;
@@ -319,7 +374,6 @@ export class Store {
   /** Lokale Aenderung: Cache schreiben und Senden an den Server anstossen. */
   _persist() {
     this._cache();
-    this.seq += 1;
     this._scheduleSync();
     return true;
   }
@@ -328,6 +382,10 @@ export class Store {
 
   get canWrite() {
     return !(this.role === 'spieler' || this.mustChange);
+  }
+
+  get canRead() {
+    return !!this.role && !this.mustChange;
   }
 
   get canSync() {
@@ -342,7 +400,7 @@ export class Store {
   setSession({ role, mustChange = false }) {
     this.role = role;
     this.mustChange = mustChange;
-    if (this.canSync && this.seq !== this.syncedSeq) this._scheduleSync();
+    if (this.canSync) this._scheduleSync();
   }
 
   /** Abmelden: lokale Kopie entfernen (Daten liegen auf dem Server). */
@@ -351,8 +409,8 @@ export class Store {
     this.storage?.removeItem(STORAGE_KEY);
     this.data = { team: createTeam(), matches: [] };
     this.version = 0;
-    this.seq = 0;
-    this.syncedSeq = 0;
+    this.synced = false;
+    this.snap = emptySnap();
     this.role = null;
     this.mustChange = false;
   }
@@ -364,35 +422,97 @@ export class Store {
 
   // ---------------- Synchronisation
 
-  _scheduleSync() {
-    if (!this.canSync) return;
+  _scheduleSync(delay = 400) {
+    if (!this.canSync || !this.synced) return;
     clearTimeout(this._timer);
-    this._timer = setTimeout(() => this.push(), 400);
+    this._timer = setTimeout(() => this.push(), delay);
   }
 
-  /** Teamstand an den Server senden. Bei Versionskonflikt zusammenfuehren und erneut senden. */
+  /**
+   * Vergleich mit dem zuletzt bekannten Server-Stand. Liefert nur die Aenderungen:
+   * Team (falls geaendert), Spiel-Kopf (falls geaendert), neue/entfernte Ereignisse.
+   */
+  _diff() {
+    const snap = this.snap;
+    const out = { team: null, matches: [], deleteMatches: [], events: [], deleteEvents: [] };
+    const next = { team: snap.team, matches: new Map(snap.matches) };
+    const teamJson = canon(this.data.team);
+    if (teamJson !== snap.team) {
+      out.team = this.data.team;
+      next.team = teamJson;
+    }
+    const alive = new Set();
+    for (const m of this.data.matches) {
+      alive.add(m.id);
+      const { events, ...header } = m;
+      const hj = canon(header);
+      const s = snap.matches.get(m.id);
+      const sEvents = s ? s.events : new Map();
+      const evMap = new Map();
+      const added = [];
+      for (const e of events) {
+        const ej = canon(e);
+        evMap.set(e.id, ej);
+        if (sEvents.get(e.id) !== ej) added.push(e);
+      }
+      const removed = [...sEvents.keys()].filter((id) => !evMap.has(id));
+      const headerChanged = !s || s.header !== hj;
+      if (!headerChanged && !added.length && !removed.length) continue;
+      if (headerChanged) out.matches.push(header);
+      for (const e of added) out.events.push({ matchId: m.id, event: e });
+      for (const id of removed) out.deleteEvents.push({ matchId: m.id, id });
+      next.matches.set(m.id, { header: hj, events: evMap });
+    }
+    for (const id of snap.matches.keys()) {
+      if (!alive.has(id)) {
+        out.deleteMatches.push(id);
+        next.matches.delete(id);
+      }
+    }
+    const hasChanges = !!(out.team || out.matches.length || out.deleteMatches.length
+      || out.events.length || out.deleteEvents.length);
+    return { out, next, hasChanges };
+  }
+
+  _hasPending() {
+    return this.synced && this._diff().hasChanges;
+  }
+
+  /** Lokale Aenderungen an den Server senden (nur das Geaenderte). */
   push() {
-    if (!this.canSync) return Promise.resolve();
+    if (!this.canSync || !this.synced) return Promise.resolve();
     if (this._inFlight) {
       this._again = true;
       return this._inFlight;
     }
-    const seq = this.seq;
+    const { out, next, hasChanges } = this._diff();
+    if (!hasChanges) {
+      this._setStatus('synchron');
+      return Promise.resolve();
+    }
     this._setStatus('sendet');
     this._inFlight = (async () => {
       try {
-        const res = await this.remote.pushState({ version: this.version, team: this.data.team, matches: this.data.matches });
-        this.version = res.version;
-        this.syncedSeq = seq;
-        this._setStatus(this.seq === seq ? 'synchron' : 'sendet');
+        const t0 = Date.now();
+        // Nur belegte Felder senden (leere Listen und fehlendes Team weglassen).
+        const body = { since: this.version };
+        for (const [key, value] of Object.entries(out)) {
+          if (value !== null && !(Array.isArray(value) && value.length === 0)) body[key] = value;
+        }
+        const res = await this.remote.pushChanges(body);
+        this._noteTime(res.now, t0);
+        this.snap = next;
+        // Nur wenn seit dem letzten Abgleich niemand anders geschrieben hat, uebernehmen wir die Version direkt.
+        if (res.based && !res.skipped) {
+          this.version = res.version;
+          this._cache();
+        }
+        this._setStatus(this._hasPending() ? 'sendet' : 'synchron');
       } catch (error) {
-        if (error.status === 409 && error.data?.state) {
-          this._mergeRemote(error.data.state);
-          this._again = true;
-        } else if (error.status === 403) {
-          this._setStatus('keine Berechtigung');
-        } else {
+        if (error.status === 403) this._setStatus('keine Berechtigung');
+        else if (error.name !== 'AbortError') {
           this._setStatus('offline');
+          this._scheduleSync(5000); // erneut versuchen
         }
       } finally {
         this._inFlight = null;
@@ -405,48 +525,110 @@ export class Store {
     return this._inFlight;
   }
 
-  /**
-   * Konflikt: Server-Stand uebernehmen. Eigene Spiele, die lokal neuer sind
-   * (updatedAt), bleiben erhalten. Team/Kader kommt vom Server.
-   */
-  _mergeRemote(remote) {
-    const serverMatches = remote.matches ?? [];
-    const localById = new Map(this.data.matches.map((m) => [m.id, m]));
-    const serverIds = new Set(serverMatches.map((m) => m.id));
-    const merged = serverMatches.map((sm) => {
-      const lm = localById.get(sm.id);
-      return lm && (lm.updatedAt ?? 0) > (sm.updatedAt ?? 0) ? lm : normalizeMatch(sm);
-    });
-    for (const lm of this.data.matches) {
-      if (!serverIds.has(lm.id) && lm.updatedAt) merged.push(lm); // lokal neu angelegt
-    }
-    this.data = { team: remote.team ?? this.data.team, matches: merged };
-    this.version = remote.version;
-    this._cache();
+  _noteTime(serverMs, t0) {
+    if (typeof serverMs === 'number') clockSync.offset = serverMs - (t0 + Date.now()) / 2;
   }
 
-  /** Vom Server holen (nur wenn keine lokalen Aenderungen ausstehen). */
-  async pull() {
-    if (!this.remote || this._inFlight || this.seq !== this.syncedSeq) return;
-    let remote;
+  /**
+   * Neue Aenderungen vom Server holen. Mit wait > 0 wartet der Server, bis es etwas Neues gibt
+   * (Long-Polling). So kommen Aenderungen sofort an, ohne dauernd Anfragen zu senden.
+   */
+  async pull({ wait = 25, signal } = {}) {
+    if (!this.remote || !this.canRead) return;
+    const t0 = Date.now();
+    let res;
     try {
-      remote = await this.remote.fetchState();
-    } catch {
-      this._setStatus('offline');
-      return;
+      res = await this.remote.fetchChanges({ since: this.version, wait, signal });
+    } catch (error) {
+      if (error.name !== 'AbortError') this._setStatus('offline');
+      throw error;
     }
-    if (this.status !== 'sendet') this._setStatus('synchron');
-    if (remote.version === this.version) return;
-    if (remote.version === 0 && this.hasContent() && this.canSync) {
-      // Erster Start mit Daten aus diesem Browser: auf den leeren Server hochladen.
-      this.seq += 1;
-      this._scheduleSync();
-      return;
-    }
-    this.data = { team: createTeam((remote.team?.players ?? []).map(normalizePlayer)), matches: remote.matches.map(normalizeMatch) };
-    this.version = remote.version;
+    this._noteTime(res.now, t0);
+    if (this._inFlight) await this._inFlight; // Eigene Sendung zuerst abschliessen
+    const changed = this._applyRemote(res);
+    this.version = res.version;
     this._cache();
-    globalThis.dispatchEvent?.(new CustomEvent('scf-data', { detail: remote.version }));
+    if (this._hasPending()) {
+      this._setStatus('sendet');
+      this._scheduleSync(0);
+    } else if (this.status !== 'sendet' || !this._inFlight) {
+      this._setStatus('synchron');
+    }
+    if (changed) globalThis.dispatchEvent?.(new CustomEvent('scf-data', { detail: res.version }));
+  }
+
+  /**
+   * Server-Aenderungen einpflegen. Konflikte: Spiel-Kopf gewinnt der neuere Stand (updatedAt),
+   * Ereignisse werden zusammengefuehrt (eindeutige Ids). Lokal geloeschte oder geaenderte
+   * Dinge, die noch nicht gesendet wurden, bleiben erhalten.
+   */
+  _applyRemote(res) {
+    let changed = false;
+    const firstSync = !this.synced;
+    const teamPending = !firstSync && canon(this.data.team) !== this.snap.team;
+    if (res.team && !teamPending) {
+      this.data.team = createTeam((res.team.players ?? []).map(normalizePlayer));
+      this.snap.team = canon(this.data.team);
+      changed = true;
+    }
+    for (const id of res.deletedMatches ?? []) {
+      const before = this.data.matches.length;
+      this.data.matches = this.data.matches.filter((m) => m.id !== id);
+      this.snap.matches.delete(id);
+      if (this.data.matches.length !== before) changed = true;
+    }
+    for (const h of res.matches ?? []) {
+      const { events: _ignored, ...header } = h;
+      const local = this.data.matches.find((m) => m.id === h.id);
+      const known = this.snap.matches.get(h.id);
+      if (!local) {
+        if (known) continue; // lokal geloescht, Loeschung ist noch nicht gesendet
+        const created = normalizeMatch({ ...header, events: [] });
+        this.data.matches.push(created);
+        this.snap.matches.set(h.id, { header: canon(stripEvents(created)), events: new Map() });
+        changed = true;
+        continue;
+      }
+      const serverTime = header.updatedAt ?? 0;
+      const localTime = local.updatedAt ?? 0;
+      let hj;
+      if (serverTime > localTime) {
+        // Server neuer: lokale Fassung ersetzen (Ereignisse bleiben).
+        const replaced = normalizeMatch({ ...header, events: local.events });
+        this.data.matches[this.data.matches.indexOf(local)] = replaced;
+        hj = canon(stripEvents(replaced));
+        changed = true;
+      } else if (serverTime === localTime) {
+        hj = canon(stripEvents(local)); // gleicher Stand
+      } else {
+        hj = canon(header); // lokal neuer und noch nicht gesendet: bleibt zum Senden offen
+      }
+      if (known) known.header = hj;
+      else this.snap.matches.set(h.id, { header: hj, events: new Map() });
+    }
+    for (const { matchId, event } of res.events ?? []) {
+      const known = this.snap.matches.get(matchId);
+      const local = this.data.matches.find((m) => m.id === matchId);
+      if (!known || !local) continue;
+      if (known.events.has(event.id)) continue; // schon bekannt (eigene Sendung) oder lokal entfernt
+      const created = createEvent(event);
+      known.events.set(event.id, canon(created));
+      if (!local.events.some((e) => e.id === event.id)) {
+        local.events = [...local.events, created].sort(byCreated);
+        changed = true;
+      }
+    }
+    for (const { matchId, id } of res.deleteEvents ?? []) {
+      const known = this.snap.matches.get(matchId);
+      if (known) known.events.delete(id);
+      const local = this.data.matches.find((m) => m.id === matchId);
+      if (local && local.events.some((e) => e.id === id)) {
+        local.events = local.events.filter((e) => e.id !== id);
+        changed = true;
+      }
+    }
+    this.synced = true;
+    return changed;
   }
 
   hasContent() {
@@ -455,27 +637,42 @@ export class Store {
 
   // ---------------- Zugriff auf Daten
 
+  /** Spiel mit fortgeschriebener Uhr. Phasenwechsel (z. B. Halbzeitende) werden gespeichert. */
+  _live(raw) {
+    const m = advanceClock(raw, serverNow());
+    if (m !== raw && (m.phase !== raw.phase || m.status !== raw.status)) {
+      const i = this.data.matches.indexOf(raw);
+      if (i !== -1) this.data.matches[i] = m;
+      this._persist();
+    }
+    return m;
+  }
+
   get team() {
     return this.data.team;
   }
 
   get matches() {
-    return this.data.matches;
+    return this.data.matches.map((m) => this._live(m));
   }
 
   /** Spiele, neueste zuerst. */
   matchesSorted() {
-    return [...this.data.matches].sort((a, b) => b.date - a.date);
+    return this.matches.sort((a, b) => b.date - a.date);
   }
 
   getMatch(id) {
-    return this.data.matches.find((m) => m.id === id) ?? null;
+    const raw = this.data.matches.find((m) => m.id === id);
+    return raw ? this._live(raw) : null;
   }
 
   saveMatch(match) {
     this._assertWrite();
-    match.updatedAt = Date.now();
     const index = this.data.matches.findIndex((m) => m.id === match.id);
+    const prev = index === -1 ? null : this.data.matches[index];
+    // updatedAt nur aendern, wenn sich der Spiel-Kopf geaendert hat (Ereignisse sind eigene Eintraege).
+    const sameHeader = prev && headerKey(prev) === headerKey(match);
+    match.updatedAt = sameHeader ? prev.updatedAt : serverNow();
     if (index === -1) this.data.matches.push(match);
     else this.data.matches[index] = match;
     this._persist();
@@ -520,7 +717,7 @@ export class Store {
       version: BACKUP_VERSION,
       exportedAt: new Date().toISOString(),
       team: this.data.team,
-      matches: this.data.matches,
+      matches: this.matches,
     };
   }
 

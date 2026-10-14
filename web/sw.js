@@ -1,10 +1,10 @@
 // Service Worker: offline nutzbar. Network-first, damit keine alten Dateien haengen bleiben.
-const CACHE = 'scf-teamlog-v10';
+const CACHE = 'scf-teamlog-v11';
 const ASSETS = [
   './',
   './index.html',
-  './css/styles.css?v=8',
-  './js/app.js?v=8',
+  './css/styles.css?v=9',
+  './js/app.js?v=9',
   './js/model.js',
   './js/stats.js',
   './js/match.js',
@@ -25,10 +25,10 @@ const ASSETS = [
   './js/opponents-data.js',
   './js/background.js',
   './manifest.webmanifest',
-  './img/logo.png?v=8',
-  './img/icon-192.png?v=8',
-  './img/icon-512.png?v=8',
-  './img/apple-touch-icon.png?v=8',
+  './img/logo.png?v=9',
+  './img/icon-192.png?v=9',
+  './img/icon-512.png?v=9',
+  './img/apple-touch-icon.png?v=9',
 ];
 
 self.addEventListener('install', (event) => {

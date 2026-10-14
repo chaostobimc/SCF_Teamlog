@@ -178,8 +178,15 @@ PORT=3000 SCF_DATA_DIR=/pfad node server/server.mjs
 
 - Datenbank: `server/data/scf-teamlog.db` (Standard, nicht im Git). Die Datei nie committen.
 - Erster Aufruf: Ersteinrichtung. Dort legst du das erste Admin-Konto an.
-- Synchronisation: Geräte laden den Teamstand vom Server und senden Änderungen
-  automatisch. Gleichzeitige Änderungen werden pro Spiel zusammengeführt.
+- Synchronisation: Geräte senden nur Änderungen (geänderte Spiele, neue oder entfernte
+  Ereignisse, Team). Empfangen wird per Long-Polling: Der Server antwortet sofort, sobald
+  es etwas Neues gibt, sonst nach ca. 25 s mit einer kleinen leeren Antwort. Im Hintergrund
+  (Tab nicht sichtbar) pausiert die Verbindung. Antworten werden komprimiert (gzip).
+- Spieluhr: Der Server speichert die Startzeit des laufenden Abschnitts. Alle Geräte rechnen
+  daraus dieselbe Zeit. Die Uhr läuft auch dann weiter, wenn niemand im Spiel ist. Das
+  Halbzeitende setzt der Server selbst.
+- Gleichzeitige Änderungen: Spiel-Kopf (Status, Uhr, Aufgebot) gewinnt der neuere Stand.
+  Ereignisse werden zusammengeführt, eindeutige Ids verhindern Doppelungen.
 
 **Rollen**
 

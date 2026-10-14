@@ -46,13 +46,11 @@ const session = {
   setUser(user) {
     applySession(user);
     store.setSession({ role: user.role, mustChange: user.mustChange });
-    if (!user.mustChange) {
-      store.pull();
-      startSync();
-    }
+    if (!user.mustChange) startSync();
   },
 };
-let pollTimer = null;
+let syncToken = null; // nur eine Abfrage-Schleife gleichzeitig
+let syncAbort = null;
 
 function currentPath() {
   const raw = location.hash.replace(/^#/, '') || '/';
@@ -159,22 +157,58 @@ async function enterApp(user) {
   store.setSession({ role: user.role, mustChange: user.mustChange });
   // Solange das Passwort gewechselt werden muss, keine Teamdaten laden.
   if (!user.mustChange) {
-    await store.pull();
+    try {
+      await store.pull({ wait: 0 }); // erster Abgleich, bevor die Ansicht gezeichnet wird
+    } catch {
+      // ohne Verbindung: lokale Kopie anzeigen, die Schleife versucht es weiter
+    }
     startSync();
   }
   route();
   if (!location.hash) navigate('/');
 }
 
-function startSync() {
-  clearInterval(pollTimer);
-  pollTimer = setInterval(() => store.pull(), 20000);
+/**
+ * Abgleich mit dem Server per Long-Polling: Die Anfrage wartet, bis es Neues gibt.
+ * Pausiert, wenn die App im Hintergrund ist (spart Akku und Mobildaten).
+ */
+async function startSync() {
+  if (syncToken || !store.canRead) return;
+  const token = {};
+  syncToken = token;
+  let failures = 0;
+  while (syncToken === token && store.canRead) {
+    syncAbort = new AbortController();
+    try {
+      await store.pull({ wait: 25, signal: syncAbort.signal });
+      failures = 0;
+    } catch (error) {
+      if (syncToken !== token || error.name === 'AbortError') break;
+      if (error.status === 401) { stopSync(); break; }
+      failures += 1;
+      await new Promise((resolve) => setTimeout(resolve, Math.min(30000, 1000 * 2 ** failures)));
+    }
+  }
+  if (syncToken === token) syncToken = null;
 }
 
 function stopSync() {
-  clearInterval(pollTimer);
-  pollTimer = null;
+  syncToken = null;
+  syncAbort?.abort();
+  syncAbort = null;
 }
+
+// ------------------------------------------------------------ Menue (Handy)
+
+const navToggle = document.getElementById('nav-toggle');
+function setNav(open) {
+  document.body.dataset.nav = open ? 'open' : '';
+  navToggle?.setAttribute('aria-expanded', String(open));
+}
+navToggle?.addEventListener('click', () => setNav(document.body.dataset.nav !== 'open'));
+document.getElementById('nav-backdrop')?.addEventListener('click', () => setNav(false));
+nav?.addEventListener('click', (e) => { if (e.target.closest('a')) setNav(false); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setNav(false); });
 
 async function logout() {
   try {
@@ -203,12 +237,20 @@ globalThis.addEventListener('scf-sync', (e) => {
 // Ansichten ohne laufende Eingabe. Kein Neuzeichnen, solange ein Dialog offen ist.
 const REFRESH_VIEWS = ['home', 'opponents', 'stats', 'squad'];
 globalThis.addEventListener('scf-data', () => {
-  if (REFRESH_VIEWS.includes(main.dataset.view) && !document.querySelector('.overlay')) route();
+  if (document.querySelector('.overlay')) return;
+  if (document.body.dataset.live === 'yes') globalThis.dispatchEvent(new CustomEvent('scf-live-refresh'));
+  else if (REFRESH_VIEWS.includes(main.dataset.view)) route();
 });
 
+// Im Hintergrund keine Verbindung halten, beim Zurueckkehren sofort abgleichen.
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && session.user && !session.user.mustChange) store.pull();
+  if (document.visibilityState === 'visible') {
+    if (session.user && !session.user.mustChange) startSync();
+  } else {
+    stopSync();
+  }
 });
+globalThis.addEventListener('online', () => { if (session.user && !session.user.mustChange) startSync(); });
 
 // ----------------------------------------------------------- Start
 
@@ -239,7 +281,7 @@ async function boot() {
   }
 }
 
-window.addEventListener('hashchange', route);
+window.addEventListener('hashchange', () => { setNav(false); route(); });
 boot();
 
 // ----------------------------------------------------------- PWA

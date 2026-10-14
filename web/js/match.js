@@ -8,12 +8,17 @@ import {
   matchClockSec,
   newId,
   phaseElapsedSec,
+  serverNow,
 } from './model.js';
 
 const HALF_LENGTH_BONUS_SEC = 5; // Wuerfe kurz nach Ablauf gelten noch
-const AUTOSAVE_MS = 5000;
-const TICK_MS = 200;
+const DISPLAY_TICK_MS = 1000; // nur fuer die Anzeige, es wird nichts gesendet
 
+/**
+ * Die Spieluhr laeuft nicht im Browser weiter, sondern wird aus der gespeicherten
+ * Startzeit (clockAt) berechnet. Jedes Geraet rechnet dieselbe Zeit aus, und die Uhr
+ * laeuft auch dann weiter, wenn gerade niemand im Spiel ist.
+ */
 export class LiveSession {
   /**
    * @param {object} opts
@@ -24,13 +29,13 @@ export class LiveSession {
    */
   constructor({ store, matchId, onChange, onTick }) {
     this.store = store;
+    this.matchId = matchId;
     this.onChange = onChange ?? (() => {});
     this.onTick = onTick ?? (() => {});
-    const match = store.getMatch(matchId);
-    if (!match) throw new Error('Spiel nicht gefunden');
-    this.match = match;
+    this._last = store.getMatch(matchId);
+    if (!this._last) throw new Error('Spiel nicht gefunden');
+    this._lastPhase = this._last.phase;
 
-    this.running = false;
     this.selectedPlayerId = null;
     this.pendingShot = null; // { goalZone, courtZone, isSevenMeter, isFreeThrow }
     this.lastCourtZone = null;
@@ -38,14 +43,18 @@ export class LiveSession {
     this.notice = null;
     this.noticeStamp = 0;
 
-    this._timer = null;
-    this._carryMs = 0;
-    this._lastTs = 0;
-    this._lastSave = 0;
+    this._ticker = null;
+    this._syncTicker();
+  }
 
-    if (this.match.status === 'laufend' && this.match.phase !== 'beendet') {
-      this._startTimer();
-    }
+  /** Aktueller Stand, Uhr auf die aktuelle Serverzeit fortgeschrieben. */
+  get match() {
+    this._last = this.store.getMatch(this.matchId) ?? this._last;
+    return this._last;
+  }
+
+  get running() {
+    return !!this.match.clockRunning;
   }
 
   get team() {
@@ -56,8 +65,14 @@ export class LiveSession {
     return this.match.status === 'laufend' && this.match.phase !== 'beendet';
   }
 
+  /** Nach Aenderungen von anderen Geraeten neu zeichnen. */
+  refresh() {
+    this._syncTicker();
+    this._emit();
+  }
+
   dispose() {
-    this._stopTimer();
+    this._stopTicker();
   }
 
   // ------------------------------------------------------------ Uhr
@@ -66,91 +81,45 @@ export class LiveSession {
     const m = this.match;
     if (m.status === 'beendet' || m.phase === 'beendet') return;
     if (m.status !== 'laufend') {
-      this._commit({ ...m, status: 'laufend' }, { keepClockRunning: true });
-      this._startTimer();
+      this._commit({ ...m, status: 'laufend', clockRunning: true, clockAt: serverNow() }, { keepClockRunning: true });
       return;
     }
-    if (this.running) this._pause();
-    else this._startTimer();
+    if (m.clockRunning) this._pause();
+    else this._start();
+  }
+
+  _start() {
+    const m = this.match;
+    this._commit({ ...m, clockRunning: true, clockAt: serverNow() }, { keepClockRunning: true });
   }
 
   _pause() {
-    this._stopTimer();
-    this.store.saveMatch(this.match);
-    this.running = false;
-    this._emit();
+    this._commit({ ...this.match, clockRunning: false, clockAt: 0 }, { keepClockRunning: false });
   }
 
-  _startTimer() {
-    this._stopTimer();
-    this._carryMs = 0;
-    this._lastTs = Date.now();
-    this._lastSave = Date.now();
-    this._timer = setInterval(() => this._tick(), TICK_MS);
-    this.running = true;
-    this._emit();
+  _syncTicker() {
+    if (this.running && !this._ticker) this._ticker = setInterval(() => this._tick(), DISPLAY_TICK_MS);
+    if (!this.running) this._stopTicker();
   }
 
-  _stopTimer() {
-    if (this._timer) clearInterval(this._timer);
-    this._timer = null;
-    this.running = false;
+  _stopTicker() {
+    if (this._ticker) clearInterval(this._ticker);
+    this._ticker = null;
   }
 
   _tick() {
-    const now = Date.now();
-    this._carryMs += now - this._lastTs;
-    this._lastTs = now;
-    const seconds = Math.floor(this._carryMs / 1000);
-    if (seconds <= 0) return;
-    this._carryMs -= seconds * 1000;
-
-    let m = this.match;
-    if (m.status !== 'laufend' || m.phase === 'beendet') {
-      this._stopTimer();
-      this._emit();
+    // Der Zugriff auf das Spiel speichert ggf. einen Phasenwechsel (Halbzeitende).
+    const m = this.match;
+    if (m.phase !== this._lastPhase) {
+      const prev = this._lastPhase;
+      this._lastPhase = m.phase;
+      this._syncTicker();
+      if (prev === 'ersteHalbzeit') this._notify('Ende der 1. Halbzeit');
+      else if (m.phase === 'beendet') this._notify('Spielende');
+      else this._emit();
       return;
     }
-
-    switch (m.phase) {
-      case 'ersteHalbzeit': {
-        let elapsed = m.firstHalfSec + seconds;
-        if (elapsed >= halfLengthSec(m)) {
-          elapsed = halfLengthSec(m);
-          m = { ...m, firstHalfSec: elapsed, phase: 'halbzeitpause' };
-          this._stopTimer();
-          this._commit(m, { keepClockRunning: false });
-          this._notify('Ende der 1. Halbzeit');
-          return;
-        }
-        m = { ...m, firstHalfSec: elapsed };
-        break;
-      }
-      case 'halbzeitpause':
-        m = { ...m, pauseSec: m.pauseSec + seconds };
-        break;
-      case 'zweiteHalbzeit': {
-        let elapsed = m.secondHalfSec + seconds;
-        if (elapsed >= halfLengthSec(m)) {
-          elapsed = halfLengthSec(m);
-          m = { ...m, secondHalfSec: elapsed, phase: 'beendet', status: 'beendet' };
-          this._stopTimer();
-          this._commit(m, { keepClockRunning: false });
-          this._notify('Spielende');
-          return;
-        }
-        m = { ...m, secondHalfSec: elapsed };
-        break;
-      }
-      default:
-        return;
-    }
-
-    this.match = m;
-    if (now - this._lastSave >= AUTOSAVE_MS) {
-      this._lastSave = now;
-      this.store.saveMatch(m);
-    }
+    if (!m.clockRunning) this._syncTicker();
     this.onTick();
   }
 
@@ -158,19 +127,20 @@ export class LiveSession {
   startSecondHalf() {
     const m = this.match;
     if (m.phase === 'beendet' || m.phase === 'zweiteHalbzeit') return;
-    const wasRunning = this.running;
-    this._stopTimer();
+    const wasRunning = m.clockRunning;
     this.pendingShot = null;
-    this._commit({ ...m, phase: 'zweiteHalbzeit' }, { keepClockRunning: false });
+    this._commit(
+      { ...m, phase: 'zweiteHalbzeit', clockRunning: wasRunning, clockAt: wasRunning ? serverNow() : 0 },
+      { keepClockRunning: wasRunning },
+    );
+    this._lastPhase = 'zweiteHalbzeit';
     this._notify('2. Halbzeit');
-    if (wasRunning) this._startTimer();
   }
 
   finishMatch() {
     const m = this.match;
     if (m.status === 'beendet') return;
-    this._stopTimer();
-    this._commit({ ...m, phase: 'beendet', status: 'beendet' }, { keepClockRunning: false });
+    this._commit({ ...m, phase: 'beendet', status: 'beendet', clockRunning: false, clockAt: 0 }, { keepClockRunning: false });
     this._notify('Spiel beendet');
   }
 
@@ -201,7 +171,9 @@ export class LiveSession {
       case 'zweiteHalbzeit': updated = { ...m, secondHalfSec: v }; break;
       default: updated = { ...m, pauseSec: v }; break;
     }
-    this._commit(updated, { keepClockRunning: this.running });
+    // Lauft die Uhr, ab jetzt neu zaehlen (neue Startzeit).
+    updated.clockAt = m.clockRunning ? serverNow() : 0;
+    this._commit(updated, { keepClockRunning: m.clockRunning });
   }
 
   // ------------------------------------------------- Spieler & Zonen
@@ -459,18 +431,26 @@ export class LiveSession {
     this._commit({ ...m, events: [...m.events, event] }, { keepClockRunning: this.running });
   }
 
-  /** Speichert das Spiel; schliesst Halbzeit-Toleranz ein. */
+  /**
+   * Speichert das Spiel. Wird die Uhr angehalten (keepClockRunning false), schliesst die
+   * Halbzeit-Toleranz ein; die Uhr-Startzeit wird geloescht.
+   */
   _commit(match, { keepClockRunning = false } = {}) {
     let toSave = match;
-    if (!keepClockRunning && toSave.phase !== 'beendet') {
-      const over = phaseElapsedSec(toSave) - halfLengthSec(toSave);
-      if (over > 0 && over <= HALF_LENGTH_BONUS_SEC) {
-        if (toSave.phase === 'ersteHalbzeit') toSave = { ...toSave, firstHalfSec: halfLengthSec(toSave) };
-        if (toSave.phase === 'zweiteHalbzeit') toSave = { ...toSave, secondHalfSec: halfLengthSec(toSave) };
+    if (!keepClockRunning) {
+      toSave = { ...toSave, clockRunning: false, clockAt: 0 };
+      if (toSave.phase !== 'beendet') {
+        const over = phaseElapsedSec(toSave) - halfLengthSec(toSave);
+        if (over > 0 && over <= HALF_LENGTH_BONUS_SEC) {
+          if (toSave.phase === 'ersteHalbzeit') toSave = { ...toSave, firstHalfSec: halfLengthSec(toSave) };
+          if (toSave.phase === 'zweiteHalbzeit') toSave = { ...toSave, secondHalfSec: halfLengthSec(toSave) };
+        }
       }
     }
-    this.match = toSave;
+    this._last = toSave;
+    this._lastPhase = toSave.phase;
     this.store.saveMatch(toSave);
+    this._syncTicker();
     this._emit();
     return toSave;
   }
